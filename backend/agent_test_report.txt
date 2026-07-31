@@ -1,0 +1,59 @@
+LegalGPT Agent Test Report
+========================================
+Date: 2026-07-30 14:12:18
+Execution Time: 53.94 seconds
+Contract ID: bef28f15-56fe-4bdf-a479-6fb85974aa31
+Configuration: OK
+Database: OK
+
+Summary Agent            ✓ PASS
+Clause Agent             ✓ PASS
+Risk Agent               ✓ PASS
+Compliance Agent         ✓ PASS
+Negotiation Agent        ✗ FAIL
+Comparison Agent         ✓ PASS
+Retrieval Agent          ✓ PASS
+QA Agent                 ✓ PASS
+Knowledge Graph          ✓ PASS
+Chat Agent               ✓ PASS
+
+Agents Passed: 9/10
+
+Overall Status:
+FAILED AGENTS
+- Negotiation Agent
+
+Errors:
+- Negotiation Agent: Agent returned an empty or unsuccessful response
+
+Agent Outputs:
+----------------------------------------
+Summary Agent
+{"summary": "This document constitutes a SERVICE AGREEMENT established between ABC Pvt Ltd and XYZ Solutions. The explicit commercial or legal objective of this contract, beyond its designation as a service agreement, is not specified. The scope of work, including any defined services", "key_obligations": [], "important_dates": [], "key_risks": [], "critical_clauses": [], "business_impact": "Not explicitly stated in the contract."}
+----------------------------------------
+Clause Agent
+{"clauses": [{"title": "Termination", "category": "Termination", "content": "The agreement may be terminated with 60 days written notice.", "confidence_score": 0.76, "citations": [{"chunk_id": "chunk_4", "page": 2}]}]}
+----------------------------------------
+Risk Agent
+{"contract_type": "Service Agreement", "overall_score": 85, "risk_matrix": [{"category": "Confidentiality", "issue": "The confidentiality clause is overly", "confidence_score": 0.85}], "mitigation_plan": []}
+----------------------------------------
+Compliance Agent
+{"contract_type": "Service Agreement", "applicable_frameworks": ["Confidentiality Obligations", "Contractual Risk Management", "Document Retention"], "compliant": false, "issues": [], "recommendations": [], "framework": ["Confidentiality Obligations", "Contractual Risk Management", "Document Retention"], "clause_type": "Compliance", "status": "Non-Compliant", "gap_analysis": []}
+----------------------------------------
+Negotiation Agent
+{"overall_risk_score": 90, "overall_risk_level": "High", "executive_summary": "The provided contract context is extremely sparse, outlining only basic terms for termination, payment, and confidentiality. It lacks critical provisions essential", "negotiation_suggestions": [], "priority_actions": []}
+----------------------------------------
+Comparison Agent
+{"similarities": [{"category": "Parties", "both_include": "Agreement entered between ABC Pvt Ltd and XYZ Solutions", "specific_match": "Both contracts explicitly state the same parties."}, {}], "differences": [], "missing_clauses": [], "risk_differences": [], "summary": ""}
+----------------------------------------
+Retrieval Agent
+{"metadata": {"query": "What is the payment clause?", "contract_id": "bef28f15-56fe-4bdf-a479-6fb85974aa31", "requested_top_k": 5, "query_expansions": [], "expansion_time_ms": 0, "semantic_time_ms": 0, "semantic_results_count": 6, "keyword_time_ms": 0, "keyword_results_count": 6, "ranking_time_ms": 0, "parent_mapping": {"parent_2": [0], "parent_1": [1], "parent_4": [2], "parent_3": [3], "parent_5": [4], "parent_6": [5]}, "deduplication_time_ms": 0, "total_retrieval_time_ms": 0, "total_chunks_retrieved": 6, "total_chunks_deduplicated": 6, "returned_chunks": 5, "semantic_match_count": 6, "bm25_match_count": 6, "top_retrieval_score": 0.8578804195804197, "retrieval_time_ms": 0, "semantic_matches": 6, "bm25_matches": 6, "retrieval_score": 0.8578804195804197, "chunk_scores": [{"combined_score": 0.8578804195804197, "semantic_score": 0.8489510489510491, "keyword_score": 1.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.766}, {"combined_score": 0.8479069767441861, "semantic_score": 0.8822674418604652, "keyword_score": 1.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.3}, {"combined_score": 0.26825, "semantic_score": 0.0, "keyword_score": 0.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.765}, {"combined_score": 0.245, "semantic_score": 0.0, "keyword_score": 0.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.3}, {"combined_score": 0.245, "semantic_score": 0.0, "keyword_score": 0.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.3}], "parent_ids": ["parent_2", "parent_1", "parent_4", "parent_3", "parent_5"], "child_ids": ["chunk_2", "chunk_1", "chunk_4", "chunk_3", "chunk_5"], "retrieved_chunk_count": 6, "deduplicated_chunk_count": 5, "faiss_latency_ms": 0, "bm25_latency_ms": 0}, "parent_chunks": [{"id": "chunk_2", "child_id": "chunk_2", "parent_id": "parent_2", "child_text": "This agreement is entered between ABC Pvt Ltd and XYZ Solutions.", "parent_text": "This agreement is entered between ABC Pvt Ltd and XYZ Solutions.", "content": "This agreement is entered between ABC Pvt Ltd and XYZ Solutions.", "metadata": {"child_id": "chunk_2", "parent_id": "parent_2", "child_text": "This agreement is entered between ABC Pvt Ltd and XYZ Solutions.", "parent_text": "This agreement is entered between ABC Pvt Ltd and XYZ Solutions.", "score": 0.8489510489510491, "relevance_source": "bm25"}, "_scoring": {"combined_score": 0.8578804195804197, "semantic_score": 0.8489510489510491, "keyword_score": 1.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.766}, "child_ids": ["chunk_2"], "child_count": 1, "child_indices": [0], "retrieval_method": "hybrid"}, {"id": "chunk_1", "child_id": "chunk_1", "parent_id": "parent_1", "child_text": "SERVICE AGREEMENT", "parent_text": "SERVICE AGREEMENT", "content": "SERVICE AGREEMENT", "metadata": {"child_id": "chunk_1", "parent_id": "parent_1", "child_text": "SERVICE AGREEMENT", "parent_text": "SERVICE AGREEMENT", "score": 0.0, "relevance_source": "bm25"}, "_scoring": {"combined_score": 0.8479069767441861, "semantic_score": 0.8822674418604652, "keyword_score": 1.0, "parent_relevance": 0.8, "position_score": 1.0, "citation_score": 0.2, "length_score": 0.3}, "child_ids": ["chunk_1"], "child_count": 1, "child_indices": [1], "retrieval_method": "hybrid"}, {"id": "chunk_4", "child_id": "chunk_4", "parent_id": "parent_4", "child_text": "The agreement may be terminated with 60 days written notice.", "parent_text": "The agreement may be terminated with 60 days written notice.", "content": "The agreement may be terminated with 60 days written notice.", "metadata": {"child_id": "chunk_4", "parent_id": "parent_4", "child_text": "The agreement may be terminated with 60 days written notice.", "parent_text": "The agreement may be terminated with 60 days written notice.", "score": 
+----------------------------------------
+QA Agent
+{"final_response": "Analysis Error: 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 41.743370959s. [links {\n  description: \"Learn more about Gemini API quotas\"\n  url: \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n}\n, violations {\n  quota_metric: \"generativelanguage.googleapis.com/generate_content_free_tier_requests\"\n  quota_id: \"GenerateRequestsPerDayPerProjectPerModel-FreeTier\"\n  quota_dimensions {\n    key: \"model\"\n    value: \"gemini-2.5-flash\"\n  }\n  quota_dimensions {\n    key: \"location\"\n    value: \"global\"\n  }\n  quota_value: 20\n}\n, retry_delay {\n  seconds: 41\n}\n]"}
+----------------------------------------
+Knowledge Graph
+{"entities": [], "relationships": [], "statistics": {"entity_count": 0, "relationship_count": 0}}
+----------------------------------------
+Chat Agent
+{"answer": "Model unavailable", "sources": [{"parent_id": "parent_2", "child_id": "chunk_2", "score": 0.2683}, {"parent_id": "parent_4", "child_id": "chunk_4", "score": 0.26825}, {"parent_id": "parent_1", "child_id": "chunk_1", "score": 0.245}, {"parent_id": "parent_3", "child_id": "chunk_3", "score": 0.245}, {"parent_id": "parent_5", "child_id": "chunk_5", "score": 0.245}]}

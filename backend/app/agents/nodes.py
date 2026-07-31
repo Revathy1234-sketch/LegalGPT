@@ -1,0 +1,959 @@
+import ast
+import json
+import logging
+import re
+from typing import Any, Dict, List
+
+import google.generativeai as genai
+from app.core.config import settings
+from app.agents.state import AgentState
+
+logger = logging.getLogger(__name__)
+
+CLAUSE_TYPES = [
+    "Definitions",
+    "Scope of Work",
+    "Payment Terms",
+    "Confidentiality",
+    "Termination",
+    "Intellectual Property",
+    "Warranties",
+    "Indemnification",
+    "Limitation of Liability",
+    "Force Majeure",
+    "Governing Law",
+    "Dispute Resolution",
+    "Assignment",
+    "Data Protection",
+    "Non-Compete",
+    "Non-Solicitation",
+    "Audit Rights",
+    "Insurance",
+    "Entire Agreement",
+    "Severability"
+]
+
+CLAUSE_SYNONYMS = {
+    "Termination": ["termination", "terminate", "early termination", "terminat"],
+    "Payment Terms": ["payment terms", "pay", "compensation", "fees", "invoice", "due date"],
+    "Confidentiality": ["confidentiality", "confidential information", "non-disclosure", "nda"],
+    "Governing Law": ["governing law", "laws of", "jurisdiction", "venue"],
+    "Indemnification": ["indemnification", "indemnify", "hold harmless"],
+    "Limitation of Liability": ["limitation of liability", "liability cap", "cap on liability", "limited liability"],
+    "Intellectual Property": ["intellectual property", "ownership", "copyright", "patent", "trademark"],
+    "Dispute Resolution": ["dispute resolution", "arbitration", "mediation", "court", "lawsuit"],
+    "Definitions": ["definition", "definitions", "means"],
+"Scope of Work": ["scope of work", "services", "deliverables"],
+"Warranties": ["warranty", "warranties", "represents and warrants"],
+"Force Majeure": ["force majeure", "act of god"],
+"Assignment": ["assignment", "assign"],
+"Data Protection": ["data protection", "privacy", "gdpr"],
+"Non-Compete": ["non compete", "non-compete"],
+"Non-Solicitation": ["non solicitation", "non-solicitation"],
+"Audit Rights": ["audit", "inspection rights"],
+"Insurance": ["insurance", "coverage"],
+"Entire Agreement": ["entire agreement"],
+"Severability": ["severability", "severable"]
+}
+
+RISK_WEIGHTS = {
+    "High": 25,
+    "Medium": 15,
+    "Low": 5,
+}
+
+
+def get_gemini_model(model_name: str | None = None):
+    model_name = model_name or settings.GEMINI_MODEL
+    if settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        logger.info("Using Gemini Model: %s", model_name)
+        return genai.GenerativeModel(model_name)
+    return None
+
+
+
+
+def extract_first_json_block(text: str) -> str | None:
+    if not text:
+        return None
+    
+    idx_brace = text.find("{")
+    idx_bracket = text.find("[")
+    
+    if idx_brace == -1 and idx_bracket == -1:
+        return None
+    
+    if idx_brace != -1 and idx_bracket != -1:
+        start_idx = min(idx_brace, idx_bracket)
+    elif idx_brace != -1:
+        start_idx = idx_brace
+    else:
+        start_idx = idx_bracket
+        
+    stack = []
+    in_string = False
+    escape = False
+    
+    for idx in range(start_idx, len(text)):
+        char = text[idx]
+        if escape:
+            escape = False
+            continue
+        if char == '\\':
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if char in "{[":
+                stack.append(char)
+            elif char in "]}":
+                if not stack:
+                    continue
+                last = stack[-1]
+                if (last == "{" and char == "}") or (last == "[" and char == "]"):
+                    stack.pop()
+                    if not stack:
+                        return text[start_idx:idx+1]
+    return None
+
+
+def remove_trailing_commas(json_str: str) -> str:
+    return re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+
+def remove_malformed_commas(json_str: str) -> str:
+    # Trailing commas before } or ]
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+    # Double commas
+    json_str = re.sub(r',(\s*,)+', ',', json_str)
+    return json_str
+
+
+def repair_truncated_json(s: str) -> str:
+    s = s.strip()
+    if not s:
+        return s
+    
+    stack = []
+    in_string = False
+    escape = False
+    
+    repaired = []
+    for idx, char in enumerate(s):
+        if escape:
+            escape = False
+            repaired.append(char)
+            continue
+        if char == '\\':
+            escape = True
+            repaired.append(char)
+            continue
+        if char == '"':
+            in_string = not in_string
+            repaired.append(char)
+            continue
+        
+        if not in_string:
+            if char in "{[":
+                stack.append(char)
+            elif char in "]}":
+                if stack:
+                    last = stack[-1]
+                    if (last == "{" and char == "}") or (last == "[" and char == "]"):
+                        stack.pop()
+        repaired.append(char)
+        
+    if in_string:
+        if escape:
+            repaired.pop()
+        repaired.append('"')
+        
+    while stack:
+        last = stack.pop()
+        if last == "{":
+            repaired.append("}")
+        elif last == "[":
+            repaired.append("]")
+            
+    return "".join(repaired)
+
+
+def parse_json_recursive(data: Any) -> Any:
+    if isinstance(data, dict):
+        return {k: parse_json_recursive(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [parse_json_recursive(v) for v in data]
+    elif isinstance(data, str):
+        cleaned = data.strip()
+        if (cleaned.startswith("{") and cleaned.endswith("}")) or (cleaned.startswith("[") and cleaned.endswith("]")):
+            try:
+                parsed = json.loads(cleaned)
+                return parse_json_recursive(parsed)
+            except Exception:
+                try:
+                    parsed = ast.literal_eval(cleaned)
+                    return parse_json_recursive(parsed)
+                except Exception:
+                    pass
+    return data
+
+
+def parse_json_safe(raw_text: str, default: Any = None) -> Any:
+    logger = logging.getLogger(__name__)
+    if not raw_text:
+        return default
+
+    # 1. Clean fences and whitespace
+    text = raw_text.strip()
+    # Remove Markdown code fences (e.g. ```json ... ``` or just ```)
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text, flags=re.IGNORECASE)
+    text = text.strip()
+    if not text:
+        return default
+
+    def balance_brackets(sub: str) -> str:
+        sub = sub.strip()
+        # Strip trailing commas or colons before balancing
+        while sub and sub[-1] in ",:":
+            sub = sub[:-1].strip()
+        if not sub:
+            return ""
+
+        stack = []
+        in_string = False
+        escape = False
+        repaired = []
+
+        for char in sub:
+            if escape:
+                escape = False
+                repaired.append(char)
+                continue
+            if char == '\\':
+                escape = True
+                repaired.append(char)
+                continue
+            if char == '"':
+                in_string = not in_string
+                repaired.append(char)
+                continue
+            if not in_string:
+                if char in "{[":
+                    stack.append(char)
+                elif char in "]}":
+                    if stack:
+                        last = stack[-1]
+                        if (last == "{" and char == "}") or (last == "[" and char == "]"):
+                            stack.pop()
+            repaired.append(char)
+
+        if in_string:
+            repaired.append('"')
+
+        # Close open brackets in reverse order
+        while stack:
+            last = stack.pop()
+            if last == "{":
+                repaired.append("}")
+            elif last == "[":
+                repaired.append("]")
+        return "".join(repaired)
+
+    # 2. Try parsing direct text and clean comma variants first
+    candidates = [text, re.sub(r',(\s*[}\]])', r'\1', text)]
+    for cand in candidates:
+        try:
+            res = json.loads(cand)
+            res_parsed = parse_json_recursive(res)
+            if isinstance(res_parsed, (dict, list)):
+                return res_parsed
+        except Exception:
+            pass
+
+        try:
+            res = ast.literal_eval(cand)
+            if isinstance(res, (dict, list)):
+                res_parsed = parse_json_recursive(res)
+                if isinstance(res_parsed, (dict, list)):
+                    return res_parsed
+        except Exception:
+            pass
+
+    # 3. Progressive backtracking tail-trimming and balancing
+    # Only balance if the JSON is truncated (i.e. it does NOT end with a matching closing bracket/brace)
+    if text and not (text.endswith('}') or text.endswith(']')):
+        max_backtrack = min(2000, len(text))
+        if (text.startswith('{') or text.startswith('[')):
+            for offset in range(max_backtrack):
+                sub = text[:len(text) - offset]
+                if '{' not in sub and '[' not in sub:
+                    continue
+                balanced = balance_brackets(sub)
+                if not balanced:
+                    continue
+                
+                # Clean potential malformed commas in the balanced version
+                balanced_clean = re.sub(r',(\s*[}\]])', r'\1', balanced)
+                
+                for cand in (balanced, balanced_clean):
+                    try:
+                        res = json.loads(cand)
+                        res_parsed = parse_json_recursive(res)
+                        if isinstance(res_parsed, (dict, list)):
+                            return res_parsed
+                    except Exception:
+                        pass
+
+                    try:
+                        res = ast.literal_eval(cand)
+                        if isinstance(res, (dict, list)):
+                            res_parsed = parse_json_recursive(res)
+                            if isinstance(res_parsed, (dict, list)):
+                                return res_parsed
+                    except Exception:
+                        pass
+
+    logger.warning("Failed to parse JSON from response; returning default value")
+    return default
+
+
+def snippet_for_clause(contract_text: str, clause_type: str) -> str:
+    normalized = contract_text.lower()
+    for synonym in CLAUSE_SYNONYMS.get(clause_type, []):
+        idx = normalized.find(synonym)
+        if idx != -1:
+            start = max(idx - 120, 0)
+            end = min(idx + 260, len(contract_text))
+            return contract_text[start:end].strip()
+    return ""
+
+
+def build_clause_extraction_fallback(contract_text: str) -> List[Dict[str, Any]]:
+    extracted: List[Dict[str, Any]] = []
+    for clause_type in CLAUSE_TYPES:
+        snippet = snippet_for_clause(contract_text, clause_type)
+        if snippet:
+            extracted.append(
+                {
+                    "clause_type": clause_type,
+                    "original_text": snippet,
+                    "confidence_score": 0.75,
+                }
+            )
+    if not extracted and contract_text.strip():
+        extracted.append(
+            {
+                "clause_type": "General",
+                "original_text": contract_text.strip()[:1000],
+                "confidence_score": 0.5,
+            }
+        )
+    return extracted
+
+
+def get_workflow_next_agent(state: AgentState, default: str) -> str:
+    """
+    Route based on query type. Ensures proper workflow sequencing:
+    - clauses_only: extraction → end
+    - risk_only: extraction → risk → end
+    - compliance_only: extraction → compliance → end
+    - negotiation_only: extraction → risk → negotiation → end
+    """
+    query = (state.get("query") or "").lower()
+    if "clauses_only" in query:
+        return "end"
+    if "risk_only" in query:
+        return "end"
+    if "compliance_only" in query:
+        return "end"
+    if "negotiation_only" in query:
+        return "risk"
+    return default
+
+
+def contract_analysis_node(state: AgentState) -> Dict[str, Any]:
+    text = state.get("contract_text", "") or ""
+    query = state.get("query", "")
+    normalized_query = query.lower()
+    if "summary" in normalized_query or "general summary" in normalized_query:
+        next_agent = "end"
+    elif "full_workflow" in normalized_query:
+        next_agent = "extraction"
+    else:
+        next_agent = "end"
+
+    prompt = f"""
+You are a Contract Analysis Agent. Your task is to analyze the following contract in relation to this query: "{query}".
+Provide a comprehensive analysis detailing the contract type, key parties, duration, and summary.
+
+Contract Text:
+{text[:15000]}
+"""
+
+    model = get_gemini_model()
+    if model:
+        try:
+            response = model.generate_content(prompt,
+    generation_config={
+        "max_output_tokens": 1500,
+        "temperature": 0,
+    },)
+            final_response = response.text
+        except Exception as e:
+            final_response = f"Analysis Error: {str(e)}"
+    else:
+        final_response = "Mock Analysis: Mock response due to missing Gemini API Key."
+
+    logger.info("Current Node: contract_analysis_node | Next Node: %s", next_agent)
+    logger.debug("Clause Count: 0 | Risk Count: 0 | Compliance Count: 0 | Negotiation Count: 0")
+
+    return {**state, "final_response": final_response, "next_agent": next_agent}
+
+
+def clause_extraction_node(state: AgentState) -> Dict[str, Any]:
+    text = state.get("contract_text", "") or ""
+    query = state.get("query", "")
+    next_agent = get_workflow_next_agent(state, "risk")
+
+    logger.debug("=" * 50)
+    logger.info("Current Node: clause_extraction_node")
+    logger.debug("TEXT LENGTH: %d", len(text))
+    logger.debug("=" * 50)
+
+    prompt = f"""
+You are a Clause Extraction Agent.
+Extract the exact full text of each required clause from the contract.
+Required clauses:
+- Termination
+- Confidentiality
+- Payment Terms
+- Governing Law
+- Indemnification
+- Limitation of Liability
+- Force Majeure
+- Data Protection
+- Intellectual Property
+- Dispute Resolution
+
+Rules:
+- Return complete clause text only.
+- Never return partial text.
+- Never merge multiple clauses.
+- Return exact clause text as found in the contract.
+- Omit clauses that are not present.
+- Return JSON only, with no markdown or explanatory text.
+
+Output format:
+[
+  {{
+    "clause_type":"Termination",
+    "original_text":"...",
+    "confidence_score":0.95
+  }}
+]
+
+Contract Text:
+{text[:15000]}
+"""
+
+    model = get_gemini_model()
+    extracted: List[Dict[str, Any]] = []
+    if model:
+        try:
+            response = model.generate_content( prompt,
+    generation_config={
+        "max_output_tokens": 1500,
+        "temperature": 0,
+    },)
+            logger.debug("\nRAW GEMINI RESPONSE:\n%s", response.text)
+            parsed = parse_json_safe(response.text, [])
+            if isinstance(parsed, list):
+                extracted = [
+                    {
+                        "clause_type": item.get("clause_type", "Unknown"),
+                        "original_text": item.get("original_text", ""),
+                        "confidence_score": float(item.get("confidence_score", 0.0)) if item.get("confidence_score") is not None else 0.0,
+                    }
+                    for item in parsed
+                    if isinstance(item, dict)
+                ]
+        except Exception as e:
+            logger.error("CLAUSE EXTRACTION ERROR: %s", str(e))
+
+    if not extracted:
+        extracted = build_clause_extraction_fallback(text)
+
+    logger.info("clause_extraction_node | Next Node: %s", next_agent)
+    logger.info("Clause Count: %d | Risk Count: 0 | Compliance Count: 0 | Negotiation Count: 0", len(extracted))
+
+    return {**state, "extracted_clauses": extracted, "next_agent": next_agent}
+
+
+def analyze_risks_from_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    clause_map = {clause.get("clause_type", "").strip().lower(): clause for clause in clauses}
+    risk_matrix: List[Dict[str, Any]] = []
+
+    def add_risk(level: str, clause_type: str, issue: str, impact: str, mitigation: str):
+        risk_matrix.append(
+            {
+                "risk_level": level,
+                "clause_type": clause_type,
+                "issue": issue,
+                "impact": impact,
+                "mitigation": mitigation,
+            }
+        )
+
+    if "indemnification" not in clause_map:
+        add_risk(
+            "High",
+            "Indemnification",
+            "Missing indemnification clause.",
+            "Exposure to third-party claims without obligation to defend or indemnify.",
+            "Include reciprocal indemnification language for both parties.",
+        )
+
+    liability = clause_map.get("limitation of liability")
+    if not liability or not re.search(r"liability cap|cap on liability|limit.*liabilit|limit.*loss", liability.get("original_text", ""), re.I):
+        add_risk(
+            "High",
+            "Limitation of Liability",
+            "Missing or unclear liability cap.",
+            "Potential unlimited damages exposure.",
+            "Add a clear, mutual liability cap tied to fees paid or a fixed amount.",
+        )
+
+    if "governing law" not in clause_map:
+        add_risk(
+            "Medium",
+            "Governing Law",
+            "Governing law clause is absent.",
+            "Uncertainty over applicable jurisdiction and dispute resolution.",
+            "Specify a governing law and jurisdiction in the contract.",
+        )
+
+    confidentiality = clause_map.get("confidentiality")
+    if not confidentiality:
+        add_risk(
+            "Medium",
+            "Confidentiality",
+            "No confidentiality clause was detected.",
+            "Risk of unauthorized disclosure of sensitive information.",
+            "Add a strong confidentiality clause with permitted disclosures and obligations.",
+        )
+    else:
+        text = confidentiality.get("original_text", "")
+        if re.search(r"as is|without warranty|no obligation to protect|disclos.*third party|not responsible for confidentiality", text, re.I):
+            add_risk(
+                "Medium",
+                "Confidentiality",
+                "Confidentiality clause appears weak.",
+                "Sensitive data may be shared or used without adequate protection.",
+                "Tighten confidentiality terms and limit permitted disclosures.",
+            )
+
+    payment = clause_map.get("payment terms")
+    if not payment or not re.search(r"within \d+ days|due upon|due within|payment shall be|invoice", payment.get("original_text", ""), re.I):
+        add_risk(
+            "High",
+            "Payment Terms",
+            "Unclear or missing payment terms.",
+            "Billing disputes and cash flow problems could arise.",
+            "Define exact payment deadlines, invoicing procedures, and consequences for late payment.",
+        )
+
+    termination = clause_map.get("termination")
+    if termination and re.search(r"sole discretion|only.*party|unilateral|without cause.*only by", termination.get("original_text", ""), re.I):
+        add_risk(
+            "High",
+            "Termination",
+            "Termination rights appear one-sided.",
+            "One party can terminate without fair mutual protection.",
+            "Modify termination language to require mutual rights or cure periods.",
+        )
+
+    if not risk_matrix:
+        add_risk(
+            "Low",
+            clauses[0].get("clause_type", "General") if clauses else "General",
+            "No major risks were identified from available clauses.",
+            "The clause set appears generally acceptable.",
+            "Continue review with legal counsel for business-specific risks.",
+        )
+
+    return risk_matrix
+
+
+def risk_analysis_node(state: AgentState) -> Dict[str, Any]:
+    clauses = state.get("extracted_clauses", [])
+    if not clauses:
+        extracted_result = clause_extraction_node(state)
+        clauses = extracted_result.get("extracted_clauses", [])
+
+    query = (state.get("query") or "").lower()
+    # Route based on query type
+    if "risk_only" in query:
+        next_agent = "end"
+    elif "compliance_only" in query:
+        next_agent = "end"
+    elif "negotiation_only" in query:
+        next_agent = "negotiation"
+    else:
+        next_agent = "end"
+
+    prompt = f"""
+You are a senior Legal Risk Analysis Agent.
+
+Analyze the following extracted contract clauses.
+
+For each risk return:
+[
+  {{
+    "risk_level":"Low|Medium|High",
+    "clause_type":"...",
+    "issue":"...",
+    "impact":"...",
+    "mitigation":"..."
+  }}
+]
+
+Use these rules when relevant:
+- Missing Indemnification = High
+- Missing Liability Cap = High
+- Missing Governing Law = Medium
+- Weak Confidentiality = Medium
+- Unclear Payment Terms = High
+- One-sided Termination = High
+
+Clauses:
+{json.dumps(clauses, indent=2)}
+"""
+
+    model = get_gemini_model()
+    risk_matrix: List[Dict[str, Any]] = []
+    if model:
+        try:
+            response = model.generate_content(prompt,
+    generation_config={
+        "max_output_tokens": 1500,
+        "temperature": 0,
+    },)
+            logger.debug("\nRAW RISK RESPONSE:\n%s", response.text)
+            parsed = parse_json_safe(response.text, [])
+            if isinstance(parsed, list):
+                risk_matrix = [
+                    {
+                        "risk_level": item.get("risk_level", "Low"),
+                        "clause_type": item.get("clause_type", "Unknown"),
+                        "issue": item.get("issue", ""),
+                        "impact": item.get("impact", ""),
+                        "mitigation": item.get("mitigation", ""),
+                    }
+                    for item in parsed
+                    if isinstance(item, dict)
+                ]
+        except Exception as e:
+            logger.exception("RISK ANALYSIS ERROR: %s", str(e))
+
+    required_clauses = [
+        "Termination",
+        "Confidentiality",
+        "Payment Terms",
+        "Indemnification",
+        "Limitation of Liability",
+        "Governing Law",
+        "Dispute Resolution",
+        "Force Majeure",
+        "Intellectual Property",
+        "Data Protection",
+    ]
+
+    clause_map = {clause.get("clause_type", "").strip().lower(): clause for clause in clauses}
+    for clause_name in required_clauses:
+        if clause_name.strip().lower() not in clause_map:
+            risk_matrix.append(
+                {
+                    "risk_level": "High",
+                    "clause_type": clause_name,
+                    "issue": f"Missing {clause_name.lower()} clause.",
+                    "impact": "Exposure to undefined obligations and legal risk.",
+                    "mitigation": f"Add a clear {clause_name.lower()} clause that defines obligations and protections.",
+                }
+            )
+
+    if not risk_matrix:
+        risk_matrix = analyze_risks_from_clauses(clauses)
+
+    overall_score = 100
+    for risk in risk_matrix:
+        overall_score -= RISK_WEIGHTS.get(risk.get("risk_level", "Low"), 5)
+    overall_score = max(overall_score, 0)
+
+    logger.info("Current Node: risk_analysis_node | Next Node: %s", next_agent)
+    logger.info("Clause Count: %d | Risk Count: %d | Compliance Count: 0 | Negotiation Count: 0", len(clauses), len(risk_matrix))
+
+    return {**state, "risk_matrix": risk_matrix, "overall_score": overall_score, "next_agent": next_agent}
+
+
+def evaluate_compliance(clauses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    clause_types = {clause.get("clause_type", "").strip().lower(): clause for clause in clauses}
+    confidentiality = clause_types.get("confidentiality")
+    report: List[Dict[str, Any]] = []
+
+    def add(framework: str, status: str, gap_analysis: str):
+        report.append(
+            {
+                "framework": framework,
+                "clause_type": "Confidentiality",
+                "status": status,
+                "gap_analysis": gap_analysis,
+            }
+        )
+
+    if not confidentiality:
+        add("GDPR", "Non-Compliant", "No confidentiality clause was found.")
+        add("HIPAA", "Non-Compliant", "No confidentiality requirements for health data are addressed.")
+        add("SOC2", "Non-Compliant", "No confidentiality or security controls are present in the relevant clause.")
+        return report
+
+    text = confidentiality.get("original_text", "")
+    if re.search(r"third[- ]party|share.*with|disclos.*to.*third|without consent", text, re.I):
+        add(
+            "GDPR",
+            "Non-Compliant",
+            "Clause permits third-party disclosure without sufficient safeguards.",
+        )
+    else:
+        add(
+            "GDPR",
+            "Compliant",
+            "Confidentiality provisions are defined and aligned with personal data protection expectations.",
+        )
+
+    if re.search(r"protected health information|phi|health information|medical information", text, re.I):
+        add(
+            "HIPAA",
+            "Compliant",
+            "Clause explicitly references protection of health or medical information.",
+        )
+    else:
+        add(
+            "HIPAA",
+            "Non-Compliant",
+            "No explicit protections for health-related or PHI data are documented.",
+        )
+
+    if re.search(r"confidential information|security controls|access controls|data protection|encryption", text, re.I):
+        add(
+            "SOC2",
+            "Compliant",
+            "Confidentiality language addresses security controls and data protection.",
+        )
+    else:
+        add(
+            "SOC2",
+            "Non-Compliant",
+            "Control and confidentiality requirements are not sufficiently defined.",
+        )
+
+    return report
+
+
+def compliance_node(state: AgentState) -> Dict[str, Any]:
+    clauses = state.get("extracted_clauses", [])
+    if not clauses:
+        extracted_result = clause_extraction_node(state)
+        clauses = extracted_result.get("extracted_clauses", [])
+
+    query = (state.get("query") or "").lower()
+    next_agent = "end" if "compliance_only" in query else "negotiation"
+
+    prompt = f"""
+You are a Compliance Agent. Cross-reference the following clauses with compliance requirements (e.g. GDPR, HIPAA, SOC2).
+Format your response strictly as a JSON list containing: "framework", "clause_type", "status" (Compliant/Non-Compliant), "gap_analysis".
+Do not add markdown formatting or anything outside the JSON block.
+
+Clauses:
+{json.dumps(clauses, indent=2)}
+"""
+
+    model = get_gemini_model()
+    compliance_report: List[Dict[str, Any]] = []
+    if model:
+        try:
+            response = model.generate_content(prompt,
+    generation_config={
+        "max_output_tokens": 1500,
+        "temperature": 0,
+    },)
+            logger.debug("\nRAW COMPLIANCE RESPONSE:\n%s", response.text)
+            parsed = parse_json_safe(response.text, [])
+            if isinstance(parsed, list):
+                compliance_report = [
+                    {
+                        "framework": item.get("framework", "Unknown"),
+                        "clause_type": item.get("clause_type", "Unknown"),
+                        "status": item.get("status", "Non-Compliant"),
+                        "gap_analysis": item.get("gap_analysis", ""),
+                    }
+                    for item in parsed
+                    if isinstance(item, dict)
+                ]
+        except Exception as e:
+            logger.error("COMPLIANCE ANALYSIS ERROR: %s", str(e))
+
+    if not compliance_report:
+        compliance_report = evaluate_compliance(clauses)
+
+    logger.info("Current Node: compliance_node | Next Node: %s", next_agent)
+    logger.info("Clause Count: %d | Risk Count: %d | Compliance Count: %d | Negotiation Count: 0",
+                len(clauses), len(state.get('risk_matrix', [])), len(compliance_report))
+
+    return {**state, "compliance_report": compliance_report, "next_agent": next_agent}
+
+
+def build_negotiation_suggestions(
+    risk_matrix: List[Dict[str, Any]],
+    compliance_report: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    suggestions: List[Dict[str, Any]] = []
+    seen = set()
+
+    for risk in risk_matrix:
+        clause_type = risk.get("clause_type", "General")
+        clause_lower = clause_type.strip().lower()
+        if "payment" in clause_lower:
+            tactic = "Request clearer payment milestones and net terms."
+            text = "Payment shall be made within 30 days of invoice receipt, and invoices shall include itemized fees."
+        elif "indemn" in clause_lower:
+            tactic = "Seek reciprocal indemnification to balance risk exposure."
+            text = "Each party shall indemnify the other for losses arising from its own negligence or breach."
+        elif "limitation" in clause_lower or "liability" in clause_lower:
+            tactic = "Negotiate a reasonable mutual cap on damages."
+            text = "The parties’ aggregate liability under this agreement shall be limited to the greater of the fees paid in the prior 12 months or $100,000."
+        elif "governing" in clause_lower or "law" in clause_lower:
+            tactic = "Establish a neutral and predictable jurisdiction."
+            text = "This agreement shall be governed by the laws of the State of New York, without regard to conflict of law principles."
+        elif "confidential" in clause_lower:
+            tactic = "Strengthen data protection and permitted disclosure language."
+            text = "Confidential information may only be disclosed to third parties with prior written consent and under comparable confidentiality obligations."
+        elif "termination" in clause_lower:
+            tactic = "Convert unilateral termination rights into mutual rights or conditional notice requirements."
+            text = "Either party may terminate upon 30 days’ written notice if the other party materially breaches and fails to cure the breach within 15 days."
+        else:
+            tactic = "Propose standard balanced contract language to reduce ambiguity."
+            text = "The contract terms shall be clarified to ensure obligations are mutual, risks are limited, and obligations are enforceable."
+
+        if clause_type not in seen:
+            suggestions.append(
+                {
+                    "clause_type": clause_type,
+                    "proposed_text": text,
+                    "negotiation_tactic": tactic,
+                }
+            )
+            seen.add(clause_type)
+
+    for issue in compliance_report:
+        status = issue.get("status", "Non-Compliant")
+        clause_type = issue.get("clause_type", "Compliance")
+        if status.lower() != "compliant" and clause_type not in seen:
+            suggestions.append(
+                {
+                    "clause_type": clause_type,
+                    "proposed_text": "Update the clause to address compliance gaps and align with the applicable framework.",
+                    "negotiation_tactic": f"Address the {clause_type} gap by incorporating compliant language and controls.",
+                }
+            )
+            seen.add(clause_type)
+
+    if not suggestions:
+        suggestions.append(
+            {
+                "clause_type": "General",
+                "proposed_text": "Add or improve the clauses that are missing or present the highest risk.",
+                "negotiation_tactic": "Focus on balancing contractual obligations and reducing liability exposure.",
+            }
+        )
+    return suggestions
+
+
+def negotiation_node(state: AgentState) -> Dict[str, Any]:
+    risk_matrix = state.get("risk_matrix", [])
+    compliance_report = state.get("compliance_report", [])
+    if not risk_matrix:
+        risk_result = risk_analysis_node(state)
+        risk_matrix = risk_result.get("risk_matrix", [])
+
+    next_agent = "end"
+    prompt = f"""
+You are a Negotiation Agent. Review these risks and the compliance report, then provide concrete counter-party draft redline sentences to mitigate them.
+Format your response strictly as a JSON list of objects containing: "clause_type", "proposed_text", "negotiation_tactic".
+Do not add markdown formatting or anything outside the JSON block.
+
+Risk Matrix:
+{json.dumps(risk_matrix, indent=2)}
+
+Compliance Report:
+{json.dumps(compliance_report, indent=2)}
+"""
+
+    model = get_gemini_model()
+    negotiation_suggestions: List[Dict[str, Any]] = []
+    if model:
+        try:
+            response = model.generate_content(prompt,
+    generation_config={
+        "max_output_tokens": 1500,
+        "temperature": 0,
+    },)
+            logger.debug("\nRAW NEGOTIATION RESPONSE:\n%s", response.text)
+            parsed = parse_json_safe(response.text, [])
+            if isinstance(parsed, list):
+                negotiation_suggestions = [
+                    {
+                        "clause_type": item.get("clause_type", "General"),
+                        "proposed_text": item.get("proposed_text", ""),
+                        "negotiation_tactic": item.get("negotiation_tactic", ""),
+                    }
+                    for item in parsed
+                    if isinstance(item, dict)
+                ]
+        except Exception as e:
+            logger.error("NEGOTIATION ERROR: %s", str(e))
+
+    if not negotiation_suggestions:
+        negotiation_suggestions = build_negotiation_suggestions(risk_matrix, compliance_report)
+
+    logger.info("Current Node: negotiation_node | Next Node: %s", next_agent)
+    logger.info("Clause Count: %d | Risk Count: %d | Compliance Count: %d | Negotiation Count: %d",
+                len(state.get('extracted_clauses', [])), len(risk_matrix), len(compliance_report), len(negotiation_suggestions))
+
+    return {**state, "negotiation_suggestions": negotiation_suggestions, "next_agent": next_agent}
+
+
+def judge_node(state: AgentState) -> Dict[str, Any]:
+    iterations = state.get("iterations", 0) or 0
+    iterations += 1
+    
+    next_agent = state.get("next_agent", "end")
+    if next_agent is None:
+        next_agent = "end"
+    else:
+        next_agent = str(next_agent).lower().strip()
+
+    if iterations > 10:
+        logger.warning("Max supervisor iterations (10) exceeded. Terminating to prevent infinite loop.")
+        next_agent = "end"
+        
+    valid_agents = ["analysis", "extraction", "risk", "compliance", "negotiation", "end"]
+    if next_agent not in valid_agents:
+        logger.warning("Invalid next_agent routed: '%s'. Forcing destination 'end'.", next_agent)
+        next_agent = "end"
+
+    logger.info("Current Node: judge_node | Next Node: %s | Iterations: %d", next_agent, iterations)
+    return {**state, "next_agent": next_agent, "iterations": iterations}

@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*$py.class
+*.pyo
+
+# Caches
+.pytest_cache/
+pytest-cache-files-*/
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Uploads & Index generated files
+uploads/
+faiss_index/
+*.index
+*.json_metadata
+
+# Logs & Output files
+logs/
+*.log
+test_output.txt
+
+# Environment variables
+.env
+.env.local
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.idea/
+.vscode/*
+!.vscode/settings.json
