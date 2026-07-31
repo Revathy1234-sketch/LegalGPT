@@ -17,7 +17,7 @@ from app.core.config import settings
 import ast
 import os
 import time
-import traceback
+
 import uuid
 import google.generativeai as genai
 
@@ -247,7 +247,7 @@ def load_contract_text_from_storage(contract: Contract) -> str:
         try:
             return DocumentParser.extract_text_from_pdf(contract.storage_url)
         except Exception as e:
-            print("Contract storage text load failed:", str(e))
+            logger.warning("Unable to load contract text from storage: %s", e)
     return ""
 
 
@@ -321,25 +321,25 @@ def ask_contract_question(
                 top_k=settings.TOP_K_RETRIEVAL
             )
         except Exception as e:
-            traceback.print_exc()
-            print("VECTOR_SEARCH_ERROR:", str(e))
+            logger.exception("Contract QA processing failed")
+            logger.error("Vector search failed: %s", e)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Retrieval engine failed: {str(e)}")
 
         start_time = time.perf_counter()
-        print(f"Question: {request.question}")
-        print(f"Contract ID: {contract_id}")
-        print(f"Retrieved chunks: {len(results)}")
+        logger.debug("Contract QA request received")
+        logger.debug("Contract QA request for contract_id=%s", contract_id)
+        logger.info("Contract QA retrieval returned %s chunks", len(results))
         if results:
             top_score = results[0].get("score", 0.0)
-            print(f"Top score: {top_score}")
+            logger.debug("Contract QA top retrieval score=%s", top_score)
         else:
             top_score = 0.0
 
         if not results:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            print(f"Gemini Called: False")
-            print(f"Gemini Response Length: 0")
-            print(f"Latency (ms): {latency_ms:.2f}")
+            logger.info("Contract QA completed without LLM call")
+            logger.debug("Contract QA response length=0")
+            logger.info("Contract QA latency_ms=%.2f", latency_ms)
             return {
                 "answer": "Information not found in the contract.",
                 "confidence": 0.0,
@@ -347,7 +347,7 @@ def ask_contract_question(
             }
 
         if top_score < settings.MIN_RELEVANCE_SCORE:
-            print(f"Top score below MIN_RELEVANCE_SCORE ({settings.MIN_RELEVANCE_SCORE}), but continuing with Gemini.")
+            logger.info("Contract QA score is below configured minimum; continuing with LLM")
 
         context = "\n\n".join(
             chunk.get("parent_text", chunk.get("child_text", ""))
@@ -369,16 +369,16 @@ def ask_contract_question(
 
         if not settings.GEMINI_API_KEY:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            print(f"Gemini Called: False")
-            print(f"Gemini Response Length: 0")
-            print(f"Latency (ms): {latency_ms:.2f}")
+            logger.info("Contract QA completed without LLM call")
+            logger.debug("Contract QA response length=0")
+            logger.info("Contract QA latency_ms=%.2f", latency_ms)
             return {
                 "answer": "No Gemini API Key provided.",
                 "confidence": confidence_score,
                 "sources": sources_payload
             }
 
-        print("Generating LangChain QA answer...")
+        logger.info("Generating contract QA response")
 
         rag_response = langchain_rag_service.ask(
     contract_id=str(contract.id),
@@ -389,9 +389,9 @@ def ask_contract_question(
         response_length = len(answer)
         latency_ms = (time.perf_counter() - start_time) * 1000
 
-        print(f"Gemini Called: True")
-        print(f"Gemini Response Length: {response_length}")
-        print(f"Latency (ms): {latency_ms:.2f}")
+        logger.info("Contract QA completed with LLM call")
+        logger.debug("Contract QA response length=%s", response_length)
+        logger.info("Contract QA latency_ms=%.2f", latency_ms)
 
         return {
             "answer": answer,
@@ -402,6 +402,6 @@ def ask_contract_question(
     except HTTPException:
         raise
     except Exception as e:
-        traceback.print_exc()
-        print("CONTRACT_QA_ERROR:", str(e))
+        logger.exception("Contract QA processing failed")
+        logger.error("Contract QA failed: %s", e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

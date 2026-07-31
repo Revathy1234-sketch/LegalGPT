@@ -2,6 +2,7 @@ import os
 import json
 import re
 import math
+import logging
 from typing import List, Dict, Any, Optional
 
 try:
@@ -18,6 +19,8 @@ SentenceTransformer = None
 SENTENCE_TRANSFORMERS_IMPORT_ERROR = "sentence-transformers import skipped for startup safety"
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SimpleBM25:
@@ -84,14 +87,14 @@ class VectorService:
             )
             return False
 
-        print("Loading embedding model...")
+        logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
         try:
             self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
         except Exception as exc:
             self.model_error = str(exc)
             return False
 
-        print("Embedding model loaded.")
+        logger.info("Embedding model loaded")
         return True
 
     def _normalize_scores(self, scores: List[float]) -> List[float]:
@@ -278,8 +281,8 @@ class VectorService:
         dimension = vectors.shape[1]
         index = faiss.IndexFlatIP(dimension)
         index.add(vectors)
-        print("INDEX FILE:", self._index_file_path(contract_id))
-        print("METADATA FILE:", self._metadata_file_path(contract_id))
+        logger.debug("Writing FAISS index for contract_id=%s", contract_id)
+        logger.debug("Writing chunk metadata for contract_id=%s", contract_id)
 
         faiss.write_index(index, self._index_file_path(contract_id))
 
@@ -305,7 +308,7 @@ class VectorService:
                 db.add(db_embedding)
             db.commit()
 
-        print(f"Indexed {len(chunks)} chunks for contract {contract_id}")
+        logger.info("Indexed %s chunks for contract_id=%s", len(chunks), contract_id)
 
     def search_contract(
         self,
@@ -313,7 +316,7 @@ class VectorService:
         query: str,
         top_k: int = settings.MAX_CHUNK_RESULTS
     ) -> List[Dict[str, Any]]:
-        print(f"Searching contract {contract_id} with query: {query}")
+        logger.debug("Searching contract_id=%s; query_length=%s", contract_id, len(query))
 
         chunks = self._load_chunks(contract_id)
         if not chunks:

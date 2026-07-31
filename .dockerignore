@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+backend/venv
+__pycache__
+.pytest_cache
+.env
+backend/.env
+uploads
+backend/uploads
+faiss_index
+backend/faiss_index
+*.pyc
+*.log

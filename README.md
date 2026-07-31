@@ -1,86 +1,171 @@
 # LegalGPT Enterprise
 
-An AI-powered multi-user contract intelligence platform that helps organizations review, analyze, compare, and understand legal contracts using Generative AI.
+> Production-oriented contract intelligence API powered by FastAPI, PostgreSQL, retrieval-augmented generation, and specialized legal AI agents.
 
----
+[![Python CI](https://github.com/your-org/legalgpt/actions/workflows/python.yml/badge.svg)](https://github.com/your-org/legalgpt/actions/workflows/python.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Technical Stack
-- **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, Lucide React, Zustand, Web Audio API
-- **Backend**: FastAPI, Python 3.10+, SQLAlchemy
-- **Database**: PostgreSQL (Auto-generates schemas on boot)
-- **AI Stack**: Google Gemini 1.5 API, LangGraph (Multi-Agent State Graph), FAISS (Local Vector Indexes)
+LegalGPT Enterprise helps teams upload, search, analyze, compare, and discuss legal contracts. It combines deterministic retrieval with specialized AI agents while keeping the backend API suitable for a web frontend or other clients.
 
----
+## Features
 
-## Getting Started
+- Secure user registration and JWT-based authentication
+- PDF contract upload, text extraction, and local FAISS indexing
+- Hybrid semantic and BM25 retrieval with source citations
+- Contract summary, clause extraction, risk, compliance, negotiation, comparison, chat, and knowledge-graph agents
+- PostgreSQL persistence with Alembic migrations
+- OpenAPI documentation at `/docs`
+- Docker Compose deployment and GitHub Actions validation
 
-### 1. Database Configuration
-Ensure a local PostgreSQL instance is running with a database named `legalgpt`.
-If needed, you can modify the connection string inside `backend/.env`:
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/legalgpt
+## Architecture
+
+```text
+Client / Frontend
+       |
+       v
+FastAPI API (`/api/v1`)
+       |
+       +--> Authentication and authorization
+       +--> Contract upload and document parsing
+       +--> Agent orchestration and API responses
+                  |
+                  +--> Hybrid retrieval --> FAISS indexes
+                  +--> Specialized AI agents --> Gemini / OpenRouter
+                  +--> SQLAlchemy --> PostgreSQL
 ```
 
-Alternatively, you can run PostgreSQL via Docker Compose:
-```yaml
-# docker-compose.yml (in root folder)
-version: '3.8'
-services:
-  db:
-    image: postgres:15
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: legalgpt
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+See [architecture documentation](docs/architecture.md) for details.
 
-volumes:
-  postgres_data:
+## Repository structure
+
+```text
+.
++-- backend/
+¦   +-- alembic/                 # Database migrations
+¦   +-- app/
+¦   ¦   +-- agents/              # Legal AI agents and prompts
+¦   ¦   +-- api/v1/              # Stable HTTP and WebSocket routes
+¦   ¦   +-- auth/                # Authentication helpers
+¦   ¦   +-- core/                # Settings, database, security, retrieval config
+¦   ¦   +-- models/              # SQLAlchemy models
+¦   ¦   +-- schemas/             # Pydantic request/response contracts
+¦   ¦   +-- services/            # LLM, retrieval, parsing, vector services
+¦   ¦   +-- utils/               # Shared agent utilities
+¦   +-- tests/                   # Automated tests
+¦   +-- requirements.txt
++-- database/                    # Reference PostgreSQL schema
++-- docs/                        # Architecture, API, database, deployment docs
++-- Dockerfile
++-- docker-compose.yml
++-- README.md
 ```
 
-### 2. Backend Startup
-1. Open a terminal and navigate to the backend folder:
-   ```powershell
-   cd backend
-   ```
-2. Create and activate a Python virtual environment:
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
-   ```
-3. Install dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-4. Run the development server:
-   ```powershell
-   uvicorn app.main:app --reload
-   ```
-The Swagger UI API documentation will be available at `http://localhost:8000/docs`.
+## Tech stack
 
-### 3. Frontend Startup
-1. Open a new terminal and navigate to the frontend folder:
-   ```powershell
-   cd frontend
-   ```
-2. Run the development server:
-   ```powershell
-   npm run dev
-   ```
-The user interface will be active at `http://localhost:3000`.
+- Python 3.12, FastAPI, Uvicorn
+- PostgreSQL, SQLAlchemy, Alembic
+- LangChain, LangGraph, Google Gemini, OpenRouter
+- FAISS, sentence-transformers, BM25 retrieval
+- PyMuPDF for PDF extraction
 
----
+## AI agent architecture
 
-## Multi-Agent System Diagram
+The application retains all existing agents:
 
-The LangGraph coordinator manages state transitions across five specialized legal agent nodes:
-1. **Contract Analysis Agent**: Provides executive text summarization.
-2. **Clause Extraction Agent**: Scans for specific legal obligations.
-3. **Risk Analysis Agent**: Evaluates liability vectors and calculates risk safety indexes.
-4. **Compliance Agent**: Audits clauses against GDPR constraints.
-5. **Negotiation Agent**: Produces counter-party suggestion drafts.
-6. **Judge Agent**: Verifies output data structures before finalizing executions.
+- Summary
+- Clause extraction
+- Risk analysis
+- Compliance
+- Negotiation
+- Contract comparison
+- Retrieval
+- Q&A
+- Knowledge graph
+- Contract chat
+
+Each agent receives retrieved contract context and returns structured output for its corresponding API operation. See [docs/architecture.md](docs/architecture.md).
+
+## Database design
+
+Core entities are organizations, users, contracts, clauses, risk analyses, contract summaries, embeddings, agent execution logs, chat sessions, and chat messages. Read [database documentation](docs/database.md) before running migrations.
+
+## Installation
+
+### Prerequisites
+
+- Python 3.12+
+- PostgreSQL 15+
+- A Gemini API key (OpenRouter is optional fallback)
+
+### Local setup
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+Copy-Item backend\.env.example backend\.env
+```
+
+Set your local values in `backend/.env`, then start PostgreSQL and run:
+
+```powershell
+cd backend
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+The API is available at `http://127.0.0.1:8000`; interactive OpenAPI documentation is at `http://127.0.0.1:8000/docs`.
+
+## API documentation
+
+All endpoints retain the `/api/v1` prefix. Key route groups:
+
+- `/api/v1/auth` — registration and token login
+- `/api/v1/contracts` — upload, list, retrieve, and ask questions
+- `/api/v1/analysis` — AI-assisted contract analysis
+- `/api/v1/chat` — authenticated WebSocket chat
+
+See [docs/api.md](docs/api.md) for the route reference.
+
+## Environment variables
+
+Copy `backend/.env.example` to `backend/.env`. Do not commit the resulting file.
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SECRET_KEY` / `JWT_SECRET` | Token-signing secrets; use strong unique production values |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | Primary LLM provider |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | Optional fallback LLM provider |
+| `UPLOAD_DIR` | Local PDF storage directory |
+| `FAISS_INDEX_PATH` | Local vector-index directory |
+
+## Docker deployment
+
+```bash
+docker compose up --build
+```
+
+Configure `backend/.env` first, then run migrations:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+See [deployment documentation](docs/deployment.md) for production guidance.
+
+## Screenshots
+
+> Add product screenshots or a short demo GIF here when the frontend is available.
+
+## Future enhancements
+
+- Frontend application and end-to-end tests
+- Object storage for contract files
+- Background job processing for long-running analysis
+- Role-based administration and audit dashboards
+- Observability, rate limiting, and production secrets management
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

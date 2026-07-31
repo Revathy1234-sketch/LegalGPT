@@ -1,39 +1,45 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *$py.class
-*.pyo
-
-# Caches
 .pytest_cache/
-pytest-cache-files-*/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Environments
+# Virtual environments
 .venv/
 venv/
-ENV/
 env/
+ENV/
+backend/venv/
 
-# Uploads & Index generated files
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data
 uploads/
 faiss_index/
+backend/uploads/
+backend/faiss_index/
 *.index
-*.json_metadata
-
-# Logs & Output files
+*_metadata.json
 logs/
 *.log
+agent_test_report.txt
 test_output.txt
 
-# Environment variables
-.env
-.env.local
+# Build and tooling
+node_modules/
+dist/
+build/
+coverage/
 
-# Operating System Files
+# IDE and operating system files
+.idea/
+.vscode/
 .DS_Store
 Thumbs.db
-
-# IDE Files
-.idea/
-.vscode/*
-!.vscode/settings.json
