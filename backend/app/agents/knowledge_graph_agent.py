@@ -73,7 +73,7 @@ from app.utils.enterprise_utils import sanitize_reasoning_summary, sanitize_warn
 @enterprise_agent_wrapper(AgentType.KNOWLEDGE_GRAPH)
 def run_knowledge_graph_agent(
     contract_id: str,
-    top_k: int = 15,
+    top_k: int = 8,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

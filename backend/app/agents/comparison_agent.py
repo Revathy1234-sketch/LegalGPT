@@ -27,7 +27,7 @@ from app.utils.enterprise_utils import sanitize_reasoning_summary, sanitize_warn
 def _run_comparison_internal(
     contract_a_id: str,
     contract_b_id: str,
-    top_k: int = 20,
+    top_k: int = 6,
 ) -> Dict[str, Any]:
     """Internal comparison logic."""
     # Retrieve Contract A
@@ -168,7 +168,7 @@ def _run_comparison_internal(
 def run_comparison_agent(
     contract_a_id: str,
     contract_b_id: str,
-    top_k: int = 20,
+    top_k: int = 6,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -214,7 +214,7 @@ def run_comparison_agent(
         )
 
     # Log start
-    logger.log_execution_start(f"{contract_a_id} vs {contract_b_id}", settings.GEMINI_MODEL, request_id)
+    logger.log_execution_start(f"{contract_a_id} vs {contract_b_id}", settings.NVIDIA_MODEL, request_id)
 
     # Check if same contract
     if contract_a_id == contract_b_id:
@@ -339,7 +339,7 @@ def run_comparison_agent(
         ExecutionMetricsLogger.log_agent_metrics(
             agent=AgentType.COMPARISON,
             contract_id=f"{contract_a_id},{contract_b_id}",
-            model=settings.GEMINI_MODEL,
+            model=settings.NVIDIA_MODEL,
             total_latency_ms=metrics.total_processing_time_ms,
             retrieved_chunks=retrieval_metadata.total_chunks_deduplicated,
             confidence=confidence_score,
@@ -358,7 +358,7 @@ def run_comparison_agent(
         ExecutionMetricsLogger.log_agent_metrics(
             agent=AgentType.COMPARISON,
             contract_id=f"{contract_a_id},{contract_b_id}",
-            model=settings.GEMINI_MODEL,
+            model=settings.NVIDIA_MODEL,
             total_latency_ms=tracker.end_total(),
             retrieved_chunks=0,
             confidence=0.0,

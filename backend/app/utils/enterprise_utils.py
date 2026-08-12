@@ -701,7 +701,7 @@ def wrap_agent_response(
     warnings: Optional[List[str]] = None,
     request_id: Optional[str] = None,
     contract_id: Optional[str] = None,
-    model: str = settings.GEMINI_MODEL,
+    model: str = settings.NVIDIA_MODEL,
 ) -> EnterpriseResponse:
     """
     Wrap an agent response in the enterprise response format.

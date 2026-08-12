@@ -62,7 +62,7 @@ def detect_contract_type(text: str) -> str:
 @enterprise_agent_wrapper(AgentType.RISK_ANALYSIS)
 def run_risk_analysis(
     contract_id: str,
-    top_k: int = 20,
+    top_k: int = 6,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

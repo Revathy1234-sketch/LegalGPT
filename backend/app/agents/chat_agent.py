@@ -22,7 +22,7 @@ def _source_references(sources):
 def run_chat_agent(
     contract_id: str,
     query: str,
-    top_k: int = 10,
+    top_k: int = 5,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

@@ -15,7 +15,7 @@ from app.utils.enterprise_utils import sanitize_reasoning_summary, sanitize_warn
 @enterprise_agent_wrapper(AgentType.NEGOTIATION)
 def run_negotiation_agent(
     contract_id: str,
-    top_k: int = 20,
+    top_k: int = 6,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

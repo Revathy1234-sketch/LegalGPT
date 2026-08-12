@@ -117,6 +117,9 @@ def run_summarize(
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_summarize', str(contract_id))
 
+    if contract.summary and contract.summary != "No summary generated.":
+        return contract
+
     start_time = time.perf_counter()
     response = run_summary_agent(str(contract_id))
     end_time = time.perf_counter()

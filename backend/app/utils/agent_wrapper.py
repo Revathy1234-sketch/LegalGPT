@@ -39,7 +39,7 @@ T = TypeVar('T', bound=Callable)
 
 def enterprise_agent_wrapper(
     agent_type: AgentType,
-    model: str = settings.GEMINI_MODEL,
+    model: str = settings.NVIDIA_MODEL,
 ) -> Callable:
     """
     Decorator to wrap agent functions with enterprise response standardization.

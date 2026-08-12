@@ -30,7 +30,10 @@ FastAPI API (`/api/v1`)
        +--> Agent orchestration and API responses
                   |
                   +--> Hybrid retrieval --> FAISS indexes
-                  +--> Specialized AI agents --> Gemini / OpenRouter
+                  +--> Specialized AI agents
+                  |      +--> NVIDIA NIM (Primary)
+                  |      +--> OpenRouter (Fallback)
+                  |      +--> Gemini (Final Fallback)
                   +--> SQLAlchemy --> PostgreSQL
 ```
 
@@ -41,18 +44,18 @@ See [architecture documentation](docs/architecture.md) for details.
 ```text
 .
 +-- backend/
-¦   +-- alembic/                 # Database migrations
-¦   +-- app/
-¦   ¦   +-- agents/              # Legal AI agents and prompts
-¦   ¦   +-- api/v1/              # Stable HTTP and WebSocket routes
-¦   ¦   +-- auth/                # Authentication helpers
-¦   ¦   +-- core/                # Settings, database, security, retrieval config
-¦   ¦   +-- models/              # SQLAlchemy models
-¦   ¦   +-- schemas/             # Pydantic request/response contracts
-¦   ¦   +-- services/            # LLM, retrieval, parsing, vector services
-¦   ¦   +-- utils/               # Shared agent utilities
-¦   +-- tests/                   # Automated tests
-¦   +-- requirements.txt
+Â¦   +-- alembic/                 # Database migrations
+Â¦   +-- app/
+Â¦   Â¦   +-- agents/              # Legal AI agents and prompts
+Â¦   Â¦   +-- api/v1/              # Stable HTTP and WebSocket routes
+Â¦   Â¦   +-- auth/                # Authentication helpers
+Â¦   Â¦   +-- core/                # Settings, database, security, retrieval config
+Â¦   Â¦   +-- models/              # SQLAlchemy models
+Â¦   Â¦   +-- schemas/             # Pydantic request/response contracts
+Â¦   Â¦   +-- services/            # LLM, retrieval, parsing, vector services
+Â¦   Â¦   +-- utils/               # Shared agent utilities
+Â¦   +-- tests/                   # Automated tests
+Â¦   +-- requirements.txt
 +-- database/                    # Reference PostgreSQL schema
 +-- docs/                        # Architecture, API, database, deployment docs
 +-- Dockerfile
@@ -95,7 +98,9 @@ Core entities are organizations, users, contracts, clauses, risk analyses, contr
 
 - Python 3.12+
 - PostgreSQL 15+
-- A Gemini API key (OpenRouter is optional fallback)
+- An NVIDIA NIM API key
+- An OpenRouter API key
+- A Gemini API key (final fallback)
 
 ### Local setup
 
@@ -120,10 +125,10 @@ The API is available at `http://127.0.0.1:8000`; interactive OpenAPI documentati
 
 All endpoints retain the `/api/v1` prefix. Key route groups:
 
-- `/api/v1/auth` — registration and token login
-- `/api/v1/contracts` — upload, list, retrieve, and ask questions
-- `/api/v1/analysis` — AI-assisted contract analysis
-- `/api/v1/chat` — authenticated WebSocket chat
+- `/api/v1/auth` â€” registration and token login
+- `/api/v1/contracts` â€” upload, list, retrieve, and ask questions
+- `/api/v1/analysis` â€” AI-assisted contract analysis
+- `/api/v1/chat` â€” authenticated WebSocket chat
 
 See [docs/api.md](docs/api.md) for the route reference.
 

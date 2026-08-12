@@ -16,7 +16,7 @@ from app.utils.enterprise_utils import sanitize_reasoning_summary, sanitize_warn
 def run_summary_agent(
     contract_id: str,
     query: str = "summary",
-    top_k: int = 20,
+    top_k: int = 6,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

@@ -78,7 +78,7 @@ class TestLLMFallback(unittest.TestCase):
         response, _ = LLMService.invoke(prompt="test", inputs={})
         self.assertEqual(response, "Gemini response")
         mock_nv_client.chat.completions.create.assert_called_once()
-        mock_or_client.chat.completions.create.assert_called_once()
+        self.assertEqual(mock_or_client.chat.completions.create.call_count, 2)
         mock_gemini.invoke.assert_called_once()
 
     @patch("app.services.llm_service.ChatGoogleGenerativeAI")
@@ -102,7 +102,7 @@ class TestLLMFallback(unittest.TestCase):
             LLMService.invoke(prompt="test", inputs={})
 
         mock_nv_client.chat.completions.create.assert_called_once()
-        mock_or_client.chat.completions.create.assert_called_once()
+        self.assertEqual(mock_or_client.chat.completions.create.call_count, 2)
         mock_gemini.invoke.assert_called_once()
 
     @patch("app.services.llm_service.LLMService.get_nvidia_client")

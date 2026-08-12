@@ -39,7 +39,7 @@ def _derive_applicable_frameworks(contract_text: str, contract_type: str) -> lis
 @enterprise_agent_wrapper(AgentType.COMPLIANCE)
 def run_compliance_agent(
     contract_id: str,
-    top_k: int = 20,
+    top_k: int = 6,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

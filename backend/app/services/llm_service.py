@@ -178,6 +178,9 @@ class LLMService:
         if isinstance(exc, RuntimeError) and "Empty model response received" in str(exc):
             return True
 
+        if isinstance(exc, ValueError) and "missing in environment configuration" in str(exc):
+            return True
+
         exc_type = type(exc).__name__
         if exc_type in ("RateLimitError", "APITimeoutError", "APIConnectionError", "APIStatusError", "APIError"):
             return True
@@ -301,12 +304,34 @@ class LLMService:
     @classmethod
     def _invoke_openrouter(cls, prompt: Any, inputs: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
         client = cls.get_openrouter_client()
-        response = client.chat.completions.create(
-            model=settings.OPENROUTER_MODEL,
-            messages=[{"role": "user", "content": cls._render_prompt(prompt, inputs)}],
-            timeout=60,
-        )
-        return cls.unpack_response(response)
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                logger.info("Using OpenRouter for LLM invocation (attempt %s)", attempt + 1)
+                response = client.chat.completions.create(
+                    model=settings.OPENROUTER_MODEL,
+                    messages=[{"role": "user", "content": cls._render_prompt(prompt, inputs)}],
+                    timeout=60,
+                )
+                return cls.unpack_response(response)
+            except Exception as exc:
+                is_quota = cls._is_quota_error(exc)
+                is_network = cls._is_network_timeout_error(exc)
+
+                if not (is_quota or is_network) or is_quota:
+                    raise
+
+                if attempt >= max_attempts - 1:
+                    raise
+
+                logger.warning(
+                    "OpenRouter temporary network/timeout error (attempt %s failed): %s; backing off and retrying",
+                    attempt + 1,
+                    exc,
+                )
+                time.sleep(cls._get_backoff_seconds(attempt))
+
+        raise RuntimeError("OpenRouter unavailable after retries")
 
     @classmethod
     def invoke(cls, prompt: Any, inputs: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:

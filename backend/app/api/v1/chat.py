@@ -1,7 +1,7 @@
 import json
 import uuid
 
-import google.generativeai as genai
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 

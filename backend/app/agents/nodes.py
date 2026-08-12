@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Any, Dict, List
 
-import google.generativeai as genai
+
 from app.core.config import settings
 from app.agents.state import AgentState
 
@@ -63,13 +63,7 @@ RISK_WEIGHTS = {
 }
 
 
-def get_gemini_model(model_name: str | None = None):
-    model_name = model_name or settings.GEMINI_MODEL
-    if settings.GEMINI_API_KEY:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        logger.info("Using Gemini Model: %s", model_name)
-        return genai.GenerativeModel(model_name)
-    return None
+
 
 
 
