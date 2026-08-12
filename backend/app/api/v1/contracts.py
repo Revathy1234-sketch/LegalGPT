@@ -119,35 +119,25 @@ async def upload_contract(
             logger.warning(f"⚠️ Embedding Error: {embedding_error}")
 
         # Generate contract summary
-        summary = "No Gemini API Key provided."
+        summary = "No primary or fallback LLM providers configured."
 
-        if settings.GEMINI_API_KEY:
-            try:
-                logger.info("Generating Gemini summary...")
-
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                model = genai.GenerativeModel(settings.GEMINI_MODEL)
-
-                response = model.generate_content(
-                    f"""
+        try:
+            logger.info("Generating contract summary via LLMService...")
+            prompt = f"""
 Summarize the following document in a professional executive summary.
 
 DOCUMENT:
 
 {full_text[:settings.MAX_SUMMARY_CHARS]}
 """
-                )
-
-                summary = response.text
-
-                if not summary:
-                    summary = "No summary generated."
-
-                logger.info("Summary generated successfully")
-
-            except Exception as summary_error:
-                logger.error("\n========== GEMINI ERROR ==========\n" + str(summary_error) + "\n==================================\n")
-                summary = f"Summary generation failed: {str(summary_error)}"
+            from app.services.llm_service import LLMService
+            summary, _ = LLMService.invoke(prompt, {})
+            if not summary or not summary.strip():
+                summary = "No summary generated."
+            logger.info("Summary generated successfully")
+        except Exception as summary_error:
+            logger.error("\n========== SUMMARY GENERATION ERROR ==========\n" + str(summary_error) + "\n==================================\n")
+            summary = f"Summary generation failed: {str(summary_error)}"
 
         # Update database
         db_contract.summary = summary

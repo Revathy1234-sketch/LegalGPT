@@ -76,17 +76,13 @@ async def websocket_chat(
             {query}
             """
             
-            # Use Gemini to generate content and stream responses
-            if settings.GEMINI_API_KEY:
-                try:
-                    model = genai.GenerativeModel(f"models/{settings.GEMINI_MODEL}")
-                    response = model.generate_content(prompt, stream=True)
-                    for chunk in response:
-                        await websocket.send_text(json.dumps({"token": chunk.text}))
-                except Exception as e:
-                    await websocket.send_text(json.dumps({"token": f"\nError generating response: {str(e)}"}))
-            else:
-                await websocket.send_text(json.dumps({"token": "Mock assistant response token: No Gemini API Key set."}))
+            # Use LLMService to generate content and send response
+            try:
+                from app.services.llm_service import LLMService
+                answer, _ = LLMService.invoke(prompt, {})
+                await websocket.send_text(json.dumps({"token": answer}))
+            except Exception as e:
+                await websocket.send_text(json.dumps({"token": f"\nError generating response: {str(e)}"}))
                 
             await websocket.send_text(json.dumps({"status": "done"}))
     except WebSocketDisconnect:

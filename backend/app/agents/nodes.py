@@ -209,8 +209,12 @@ def parse_json_safe(raw_text: str, default: Any = None) -> Any:
     # 1. Clean fences and whitespace
     text = raw_text.strip()
     # Remove Markdown code fences (e.g. ```json ... ``` or just ```)
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s*```$", "", text, flags=re.IGNORECASE)
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+    if match:
+        text = match.group(1).strip()
+    else:
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text, flags=re.IGNORECASE)
     text = text.strip()
     if not text:
         return default
@@ -394,19 +398,11 @@ Contract Text:
 {text[:15000]}
 """
 
-    model = get_gemini_model()
-    if model:
-        try:
-            response = model.generate_content(prompt,
-    generation_config={
-        "max_output_tokens": 1500,
-        "temperature": 0,
-    },)
-            final_response = response.text
-        except Exception as e:
-            final_response = f"Analysis Error: {str(e)}"
-    else:
-        final_response = "Mock Analysis: Mock response due to missing Gemini API Key."
+    try:
+        from app.services.llm_service import LLMService
+        final_response, _ = LLMService.invoke(prompt, {})
+    except Exception as e:
+        final_response = f"Analysis Error: {str(e)}"
 
     logger.info("Current Node: contract_analysis_node | Next Node: %s", next_agent)
     logger.debug("Clause Count: 0 | Risk Count: 0 | Compliance Count: 0 | Negotiation Count: 0")
@@ -460,29 +456,24 @@ Contract Text:
 {text[:15000]}
 """
 
-    model = get_gemini_model()
     extracted: List[Dict[str, Any]] = []
-    if model:
-        try:
-            response = model.generate_content( prompt,
-    generation_config={
-        "max_output_tokens": 1500,
-        "temperature": 0,
-    },)
-            logger.debug("\nRAW GEMINI RESPONSE:\n%s", response.text)
-            parsed = parse_json_safe(response.text, [])
-            if isinstance(parsed, list):
-                extracted = [
-                    {
-                        "clause_type": item.get("clause_type", "Unknown"),
-                        "original_text": item.get("original_text", ""),
-                        "confidence_score": float(item.get("confidence_score", 0.0)) if item.get("confidence_score") is not None else 0.0,
-                    }
-                    for item in parsed
-                    if isinstance(item, dict)
-                ]
-        except Exception as e:
-            logger.error("CLAUSE EXTRACTION ERROR: %s", str(e))
+    try:
+        from app.services.llm_service import LLMService
+        res_text, _ = LLMService.invoke(prompt, {})
+        logger.debug("\nRAW LLM RESPONSE:\n%s", res_text)
+        parsed = parse_json_safe(res_text, [])
+        if isinstance(parsed, list):
+            extracted = [
+                {
+                    "clause_type": item.get("clause_type", "Unknown"),
+                    "original_text": item.get("original_text", ""),
+                    "confidence_score": float(item.get("confidence_score", 0.0)) if item.get("confidence_score") is not None else 0.0,
+                }
+                for item in parsed
+                if isinstance(item, dict)
+            ]
+    except Exception as e:
+        logger.error("CLAUSE EXTRACTION ERROR: %s", str(e))
 
     if not extracted:
         extracted = build_clause_extraction_fallback(text)
@@ -633,31 +624,26 @@ Clauses:
 {json.dumps(clauses, indent=2)}
 """
 
-    model = get_gemini_model()
     risk_matrix: List[Dict[str, Any]] = []
-    if model:
-        try:
-            response = model.generate_content(prompt,
-    generation_config={
-        "max_output_tokens": 1500,
-        "temperature": 0,
-    },)
-            logger.debug("\nRAW RISK RESPONSE:\n%s", response.text)
-            parsed = parse_json_safe(response.text, [])
-            if isinstance(parsed, list):
-                risk_matrix = [
-                    {
-                        "risk_level": item.get("risk_level", "Low"),
-                        "clause_type": item.get("clause_type", "Unknown"),
-                        "issue": item.get("issue", ""),
-                        "impact": item.get("impact", ""),
-                        "mitigation": item.get("mitigation", ""),
-                    }
-                    for item in parsed
-                    if isinstance(item, dict)
-                ]
-        except Exception as e:
-            logger.exception("RISK ANALYSIS ERROR: %s", str(e))
+    try:
+        from app.services.llm_service import LLMService
+        res_text, _ = LLMService.invoke(prompt, {})
+        logger.debug("\nRAW RISK RESPONSE:\n%s", res_text)
+        parsed = parse_json_safe(res_text, [])
+        if isinstance(parsed, list):
+            risk_matrix = [
+                {
+                    "risk_level": item.get("risk_level", "Low"),
+                    "clause_type": item.get("clause_type", "Unknown"),
+                    "issue": item.get("issue", ""),
+                    "impact": item.get("impact", ""),
+                    "mitigation": item.get("mitigation", ""),
+                }
+                for item in parsed
+                if isinstance(item, dict)
+            ]
+    except Exception as e:
+        logger.exception("RISK ANALYSIS ERROR: %s", str(e))
 
     required_clauses = [
         "Termination",
@@ -781,30 +767,25 @@ Clauses:
 {json.dumps(clauses, indent=2)}
 """
 
-    model = get_gemini_model()
     compliance_report: List[Dict[str, Any]] = []
-    if model:
-        try:
-            response = model.generate_content(prompt,
-    generation_config={
-        "max_output_tokens": 1500,
-        "temperature": 0,
-    },)
-            logger.debug("\nRAW COMPLIANCE RESPONSE:\n%s", response.text)
-            parsed = parse_json_safe(response.text, [])
-            if isinstance(parsed, list):
-                compliance_report = [
-                    {
-                        "framework": item.get("framework", "Unknown"),
-                        "clause_type": item.get("clause_type", "Unknown"),
-                        "status": item.get("status", "Non-Compliant"),
-                        "gap_analysis": item.get("gap_analysis", ""),
-                    }
-                    for item in parsed
-                    if isinstance(item, dict)
-                ]
-        except Exception as e:
-            logger.error("COMPLIANCE ANALYSIS ERROR: %s", str(e))
+    try:
+        from app.services.llm_service import LLMService
+        res_text, _ = LLMService.invoke(prompt, {})
+        logger.debug("\nRAW COMPLIANCE RESPONSE:\n%s", res_text)
+        parsed = parse_json_safe(res_text, [])
+        if isinstance(parsed, list):
+            compliance_report = [
+                {
+                    "framework": item.get("framework", "Unknown"),
+                    "clause_type": item.get("clause_type", "Unknown"),
+                    "status": item.get("status", "Non-Compliant"),
+                    "gap_analysis": item.get("gap_analysis", ""),
+                }
+                for item in parsed
+                if isinstance(item, dict)
+            ]
+    except Exception as e:
+        logger.error("COMPLIANCE ANALYSIS ERROR: %s", str(e))
 
     if not compliance_report:
         compliance_report = evaluate_compliance(clauses)
@@ -902,29 +883,24 @@ Compliance Report:
 {json.dumps(compliance_report, indent=2)}
 """
 
-    model = get_gemini_model()
     negotiation_suggestions: List[Dict[str, Any]] = []
-    if model:
-        try:
-            response = model.generate_content(prompt,
-    generation_config={
-        "max_output_tokens": 1500,
-        "temperature": 0,
-    },)
-            logger.debug("\nRAW NEGOTIATION RESPONSE:\n%s", response.text)
-            parsed = parse_json_safe(response.text, [])
-            if isinstance(parsed, list):
-                negotiation_suggestions = [
-                    {
-                        "clause_type": item.get("clause_type", "General"),
-                        "proposed_text": item.get("proposed_text", ""),
-                        "negotiation_tactic": item.get("negotiation_tactic", ""),
-                    }
-                    for item in parsed
-                    if isinstance(item, dict)
-                ]
-        except Exception as e:
-            logger.error("NEGOTIATION ERROR: %s", str(e))
+    try:
+        from app.services.llm_service import LLMService
+        res_text, _ = LLMService.invoke(prompt, {})
+        logger.debug("\nRAW NEGOTIATION RESPONSE:\n%s", res_text)
+        parsed = parse_json_safe(res_text, [])
+        if isinstance(parsed, list):
+            negotiation_suggestions = [
+                {
+                    "clause_type": item.get("clause_type", "General"),
+                    "proposed_text": item.get("proposed_text", ""),
+                    "negotiation_tactic": item.get("negotiation_tactic", ""),
+                }
+                for item in parsed
+                if isinstance(item, dict)
+            ]
+    except Exception as e:
+        logger.error("NEGOTIATION ERROR: %s", str(e))
 
     if not negotiation_suggestions:
         negotiation_suggestions = build_negotiation_suggestions(risk_matrix, compliance_report)

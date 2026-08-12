@@ -40,6 +40,17 @@ class Settings(BaseSettings):
 
     OPENROUTER_MODEL: str = ""
 
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+    # =========================
+    # NVIDIA
+    # =========================
+    NVIDIA_API_KEY: str = ""
+
+    NVIDIA_MODEL: str = "openai/gpt-oss-20b"
+
+    NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+
     # =========================
     # Environment
     # =========================

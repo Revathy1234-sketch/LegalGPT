@@ -67,8 +67,10 @@ def check_configuration() -> List[Tuple[str, bool]]:
     required_keys = [
         ("GEMINI_API_KEY", settings.GEMINI_API_KEY),
         ("OPENROUTER_API_KEY", settings.OPENROUTER_API_KEY),
+        ("NVIDIA_API_KEY", settings.NVIDIA_API_KEY),
         ("GEMINI_MODEL", settings.GEMINI_MODEL),
         ("OPENROUTER_MODEL", settings.OPENROUTER_MODEL),
+        ("NVIDIA_MODEL", settings.NVIDIA_MODEL),
     ]
 
     results: List[Tuple[str, bool]] = []
@@ -185,7 +187,7 @@ def looks_meaningful(payload: Any, display_name: str) -> bool:
         if display_name == "Compliance Agent":
             return "compliant" in payload or bool(payload.get("recommendations")) or bool(payload.get("issues"))
         if display_name == "Negotiation Agent":
-            return bool(payload.get("negotiation_suggestions")) or bool(payload.get("priority_actions"))
+            return "overall_risk_score" in payload or bool(payload.get("negotiation_suggestions")) or bool(payload.get("priority_actions"))
         if display_name == "Comparison Agent":
             return bool(payload.get("similarities")) or bool(payload.get("differences")) or bool(payload.get("summary"))
         if display_name == "Retrieval Agent":

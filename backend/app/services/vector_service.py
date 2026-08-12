@@ -76,22 +76,29 @@ class VectorService:
         return True
 
     def _ensure_model(self) -> bool:
+        global SentenceTransformer
         if not self._import_dependencies():
             return False
         if self.model is not None:
             return True
         if SentenceTransformer is None:
-            self.model_error = (
-                "Sentence transformers is unavailable. "
-                f"Original error: {SENTENCE_TRANSFORMERS_IMPORT_ERROR}"
-            )
-            return False
+            try:
+                from sentence_transformers import SentenceTransformer as _SentenceTransformer
+                SentenceTransformer = _SentenceTransformer
+            except Exception as exc:
+                self.model_error = (
+                    "Sentence transformers is unavailable. "
+                    f"Original error: {exc}"
+                )
+                logger.error("Failed to lazily import SentenceTransformer: %s", exc)
+                return False
 
         logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
         try:
             self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
         except Exception as exc:
             self.model_error = str(exc)
+            logger.error("Failed to load embedding model: %s", exc)
             return False
 
         logger.info("Embedding model loaded")
