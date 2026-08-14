@@ -90,6 +90,8 @@ Return valid JSON ONLY:
 
 CRITICAL REQUIREMENTS:
 - Extract ONLY entities explicitly mentioned in the contract.
+- Never output UNKNOWN, unknown_party, or entity_0.
+- Preserve placeholders like [NAME OF COMPANY] exactly as written rather than guessing.
 - Be thorough — extract ALL money amounts, ALL dates, ALL people, ALL organisations.
 - Preserve section references for all entities and relationships.
 - Capture conditional relationships (if-then logic).
@@ -97,7 +99,7 @@ CRITICAL REQUIREMENTS:
 - Link related clauses (cross-references).
 - Use consistent entity IDs for deduplication.
 - Flag ambiguous entity references (e.g., "the party" without clarity).
-- If an entity is unclear, lower its confidence_score rather than omitting it.""",
+- If an entity is unclear, lower its confidence_score rather than omitting it, but NEVER make up a name.""",
     contract_placeholder="{contract_text}",
     include_query_section=False,
 )

@@ -61,11 +61,11 @@ CRITICAL RULES:
 - DO NOT assume compliance; require explicit contractual language.
 - Only evaluate compliance frameworks applicable to the detected contract.
 - Never include unrelated regulations or frameworks.
-- Flag missing standard protections as violations.
+- Do not claim that a contract violates regulations (like GDPR/HIPAA/SOC2) merely because a provision is missing. Instead, state "Not specified in the contract." and explain: "Further legal/compliance review may be required."
 - Quantify compliance costs/risks where applicable.
 - Distinguish between critical, high, medium, and low severity findings.
 - Recommend specific contractual language additions.
-- If information is not present, state "Not explicitly stated in the contract." — never fabricate compliance issues.""",
+- If information is not present, state "Not specified in the contract." — never fabricate compliance issues.""",
     contract_placeholder="{contract_text}",
     include_query_section=False,
 )

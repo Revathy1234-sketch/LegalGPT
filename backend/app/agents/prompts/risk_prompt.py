@@ -73,9 +73,13 @@ CRITICAL REQUIREMENTS:
 - Do not report missing Force Majeure, IP Ownership, Software Licensing, Source Code, or other unrelated risks unless they are applicable to this contract.
 - Quantify financial exposure where possible.
 - Cross-reference related clauses (liability cap + indemnity = compound risk).
-- Identify risks from ABSENCE of standard provisions for this contract type.
+- Distinguish between existing contractual risks, missing provisions, ambiguities, business/commercial concerns, and legal/compliance concerns.
+- Do NOT automatically describe a missing provision as a legal violation (e.g. do not say "Indemnification is legally required").
+- Identify risks from ABSENCE of standard provisions for this contract type (e.g., "Missing provision: Indemnification"). If absent, explicitly say "No corresponding provision was identified in the retrieved contract."
+- For risk findings: cite the actual clause when one exists. Do not invent clause numbers. Do not invent legal violations.
+- LEGAL GROUNDING RULE: Do not claim that a contract is "legally sound", "legally compliant", "legally valid", or "comprehensive".
+- Keep contract FACTS separate from RECOMMENDATIONS. Never present a recommendation as if it were written in the contract.
 - Score risks independently from mitigation feasibility.
-- If information is not present in the contract, state "Not explicitly stated in the contract." — never invent risks.
 - Include a confidence_score for each risk item.""",
     contract_placeholder="{contract_text}",
     include_query_section=False,

@@ -67,21 +67,23 @@ def run_risk_analysis(
 ) -> Dict[str, Any]:
     """
     Analyze contract risks and generate risk scores.
-    
+
     Args:
         contract_id: Contract identifier
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with risk analysis
     """
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
+    total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
-    if not contract_text.strip():
+
+    if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
                 "contract_type": "Unknown",
@@ -90,7 +92,7 @@ def run_risk_analysis(
                 "mitigation_plan": []
             },
             retrieval_result=retrieval,
-            reasoning_summary="Retrieval returned empty context",
+            reasoning_summary="Insufficient contract context was retrieved to provide a reliable answer.",
             retrieval_time_ms=retrieval_time_ms,
         )
 
@@ -114,7 +116,7 @@ def run_risk_analysis(
             llm_time_ms=int((time.time() - llm_start) * 1000), warnings=[sanitize_warning_message(str(exc))],
         )
     llm_time_ms = int((time.time() - llm_start) * 1000)
-    
+
     parsed = safe_parse_json(raw, {})
     if isinstance(parsed, dict) and parsed:
         retrieval_score = 0.0
@@ -148,7 +150,7 @@ def run_risk_analysis(
                     except (ValueError, TypeError):
                         llm_confidence = retrieval_score
                     risk_item["confidence_score"] = round(min(max(0.6 * retrieval_score + 0.4 * llm_confidence, 0.0), 1.0), 2)
-        
+
         return AgentResponseBuilder.success(
             result=parsed,
             retrieval_result=retrieval,
@@ -157,7 +159,7 @@ def run_risk_analysis(
             llm_time_ms=llm_time_ms,
             **token_usage,
         )
-    
+
     # Fallback
     return AgentResponseBuilder.success(
         result={

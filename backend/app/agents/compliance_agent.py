@@ -44,21 +44,23 @@ def run_compliance_agent(
 ) -> Dict[str, Any]:
     """
     Analyze contract for regulatory compliance.
-    
+
     Args:
         contract_id: Contract identifier
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with compliance analysis
     """
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
+    total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
-    if not contract_text.strip():
+
+    if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
                 "compliant": False,
@@ -68,7 +70,7 @@ def run_compliance_agent(
                 "contract_type": "Unknown",
             },
             retrieval_result=retrieval,
-            reasoning_summary="Retrieval returned empty context",
+            reasoning_summary="Insufficient contract context was retrieved to provide a reliable answer.",
             retrieval_time_ms=retrieval_time_ms,
         )
 
@@ -157,7 +159,7 @@ def run_compliance_agent(
             llm_time_ms=llm_time_ms,
             **token_usage,
         )
-    
+
     # Fallback with extended compliance mapping
     extended_fallback_result = {
         "compliant": False,

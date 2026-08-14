@@ -37,24 +37,6 @@ class DocumentParser:
 
     @staticmethod
     def _is_reference_text(text: str) -> bool:
-        normalized = text.lower()
-        if any(keyword in normalized for keyword in DocumentParser.REFERENCE_KEYWORDS):
-            return True
-        if DocumentParser.URL_PATTERN.search(text):
-            return True
-        if DocumentParser.DOI_PATTERN.search(text):
-            return True
-        if DocumentParser.PAGE_PATTERN.search(text) and len(text.split()) < 80:
-            return True
-        citations = len(DocumentParser.CITATION_PATTERN.findall(text))
-        if citations >= 3:
-            return True
-        authors = len(DocumentParser.AUTHOR_LIST_PATTERN.findall(text))
-        if authors >= 3:
-            return True
-        punctuation_ratio = sum(1 for ch in text if ch in '[](){}<>') / max(1, len(text))
-        if punctuation_ratio > 0.08 and len(text.split()) < 120:
-            return True
         return False
 
     @staticmethod

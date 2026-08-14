@@ -18,8 +18,9 @@ CRITICAL RULES — READ CAREFULLY:
 8. If a clause cannot be found in the text, DO NOT return it.
 9. Prefer OMISSION over HALLUCINATION — it is better to miss a clause than to invent one.
 10. Return clauses in the same order they appear in the contract.
-11. Do not fabricate clause titles; if the title is not explicit in the contract, use the closest explicit heading or omit the clause.
-12. If clause content is missing from the LLM output, recover it directly from the retrieved contract text using the clause heading.
+21. Distinguish between the AI category and the original contract heading. Do not fabricate clause titles; if the title is not explicit in the contract, use the closest explicit heading or omit the clause.
+22. CLAUSE NUMBER PROTECTION: Never create or fabricate a clause number. If no actual clause number can be determined, output clause_number = null.
+23. If clause content is missing from the LLM output, recover it directly from the retrieved contract text using the clause heading.
 
 CLAUSE CATEGORIES (use the most specific match):
 Definitions | Scope of Services | Payment Terms | Termination | Withdrawal |
@@ -40,6 +41,7 @@ Return valid JSON ONLY — each clause as an object in "clauses" array:
 {{
   "clauses": [
     {{
+      "clause_number": "4",
       "title": "Payment Terms",
       "category": "Payment Terms",
       "content": "[COMPLETE EXACT TEXT OF THE CLAUSE AS IT APPEARS IN THE CONTRACT]",

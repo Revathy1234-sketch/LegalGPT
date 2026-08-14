@@ -36,10 +36,11 @@ CRITICAL RULES:
 - Only answer using retrieved contract evidence.
 - Never answer using legal assumptions.
 - NEVER invent information not explicitly in contract.
-- If information is missing, respond: "Not specified in contract."
-- If question cannot be answered from provided context, respond: "Not specified in contract."
+- If information is missing, respond: "I could not find this information in the retrieved contract."
+- If question cannot be answered from provided context, respond: "I could not find this information in the retrieved contract."
 - For ambiguous questions, clarify what the contract actually says.
 - Always reference specific sections (never vague statements)
+- Never invent a clause number or section if it doesn't exist.
 - Flag conflicts between clauses if they exist""",
     contract_placeholder="{contract_text}",
     query_placeholder="{question}",

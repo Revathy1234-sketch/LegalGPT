@@ -41,18 +41,19 @@ def run_chat_agent(
     retrieval = retrieve_contract_context(contract_id, query, top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
     
+    total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
     sources = retrieval.get("sources", [])
     source_references = _source_references(sources)
     
-    if not contract_text.strip():
+    if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
-                "answer": "Information not found in contract.",
+                "answer": "Insufficient contract context was retrieved to provide a reliable answer.",
                 "sources": []
             },
             retrieval_result=retrieval,
-            reasoning_summary="Retrieval returned empty context",
+            reasoning_summary="Insufficient contract context was retrieved to provide a reliable answer.",
             retrieval_time_ms=retrieval_time_ms,
         )
 

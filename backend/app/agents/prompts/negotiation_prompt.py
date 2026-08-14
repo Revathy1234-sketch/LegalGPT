@@ -13,6 +13,8 @@ CRITICAL RULES:
 3. Quote the relevant clause text or section number when making suggestions.
 4. Base your recommendations on what is actually written in the contract.
 5. If a standard protection is MISSING from this contract, recommend adding it — but only if relevant to this contract type.
+6. When addressing missing provisions, explicitly use the phrase "Missing provision" (e.g., "Missing provision: Termination") instead of fabricating a clause number.
+7. Clearly label recommendations (e.g., "Suggested negotiation position:", "Suggested negotiation language:"). Never state proposed durations or terms as existing contract facts.
 
 NEGOTIATION FRAMEWORK:
 1. LEVERAGE ASSESSMENT: What are the strengths and weaknesses in the current terms?

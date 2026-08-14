@@ -20,31 +20,33 @@ def run_negotiation_agent(
 ) -> Dict[str, Any]:
     """
     Generate negotiation strategies and recommendations.
-    
+
     Args:
         contract_id: Contract identifier
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with negotiation analysis
     """
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
+    total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
-    if not contract_text.strip():
+
+    if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
                 "overall_risk_score": 0,
                 "overall_risk_level": "unknown",
-                "executive_summary": "",
+                "executive_summary": "Insufficient contract context was retrieved to provide a reliable answer.",
                 "negotiation_suggestions": [],
                 "priority_actions": []
             },
             retrieval_result=retrieval,
-            reasoning_summary="Retrieval returned empty context",
+            reasoning_summary="Insufficient contract context was retrieved to provide a reliable answer.",
             retrieval_time_ms=retrieval_time_ms,
         )
 
@@ -65,7 +67,7 @@ def run_negotiation_agent(
             llm_time_ms=int((time.time() - llm_start) * 1000), warnings=[sanitize_warning_message(str(exc))],
         )
     llm_time_ms = int((time.time() - llm_start) * 1000)
-    
+
     parsed = safe_parse_json(raw, {})
     if not isinstance(parsed, dict) or not parsed:
         parsed = {

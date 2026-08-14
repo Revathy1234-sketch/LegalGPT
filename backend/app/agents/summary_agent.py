@@ -21,13 +21,13 @@ def run_summary_agent(
 ) -> Dict[str, Any]:
     """
     Extract executive summary from contract.
-    
+
     Args:
         contract_id: Contract identifier
         query: Search query (default: "summary")
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with summary, obligations, dates, risks,
         critical_clauses, and business_impact
@@ -35,12 +35,14 @@ def run_summary_agent(
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
+    total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
-    if not contract_text.strip():
+
+    if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
-                "summary": "Information not found in contract.",
+                "summary": "Insufficient contract context was retrieved to provide a reliable answer.",
                 "key_obligations": [],
                 "important_dates": [],
                 "key_risks": [],
@@ -48,7 +50,7 @@ def run_summary_agent(
                 "business_impact": "Not explicitly stated in the contract.",
             },
             retrieval_result=retrieval,
-            reasoning_summary="Retrieval returned empty context",
+            reasoning_summary="Insufficient contract context was retrieved to provide a reliable answer.",
             retrieval_time_ms=retrieval_time_ms,
         )
 

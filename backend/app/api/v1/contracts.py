@@ -94,8 +94,14 @@ async def upload_contract(
         # Extract text
         full_text = DocumentParser.extract_text_from_pdf(file_path)
 
+        if not full_text or not full_text.strip():
+            raise ValueError("Failed to extract any text from the PDF.")
+
         # Create chunks
         chunks = DocumentParser.get_parent_child_chunks(full_text)
+
+        if not chunks:
+            raise ValueError("No chunks were generated from the contract text.")
 
         if settings.DEBUG:
             logger.debug("DEBUG MODE: Limiting chunks to 20")
@@ -331,7 +337,7 @@ def ask_contract_question(
             logger.debug("Contract QA response length=0")
             logger.info("Contract QA latency_ms=%.2f", latency_ms)
             return {
-                "answer": "Information not found in the contract.",
+                "answer": "I could not find sufficient information in the retrieved contract to answer this question.",
                 "confidence": 0.0,
                 "sources": []
             }
@@ -371,9 +377,9 @@ def ask_contract_question(
         logger.info("Generating contract QA response")
 
         rag_response = langchain_rag_service.ask(
-    contract_id=str(contract.id),
-    question=request.question
-)
+            contract_id=str(contract.id),
+            question=request.question
+        )
 
         answer = rag_response["answer"]
         response_length = len(answer)
@@ -383,10 +389,21 @@ def ask_contract_question(
         logger.debug("Contract QA response length=%s", response_length)
         logger.info("Contract QA latency_ms=%.2f", latency_ms)
 
+        mapped_sources = [
+            {
+                "parent_id": chunk.get("parent_id"),
+                "chunk_id": chunk.get("child_id"),
+                "child_text": chunk.get("child_text"),
+                "parent_text": chunk.get("parent_text"),
+                "relevance_score": float(chunk.get("score", 0.0))
+            }
+            for chunk in rag_response.get("sources", [])
+        ]
+
         return {
             "answer": answer,
             "confidence": confidence_score,
-            "sources": rag_response["sources"]
+            "sources": mapped_sources
         }
 
     except HTTPException:

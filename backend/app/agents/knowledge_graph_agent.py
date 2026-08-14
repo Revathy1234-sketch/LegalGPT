@@ -7,19 +7,19 @@ def convert_to_react_flow(entities: list, relationships: list) -> Tuple[list, li
     edges = []
     n = len(entities)
     r = 250 # layout radius
-    
+
     for i, entity in enumerate(entities):
         if not isinstance(entity, dict):
             continue
         ent_id = entity.get("id") or f"entity_{i}"
         ent_type = entity.get("type", "UNKNOWN")
         name = entity.get("name") or entity.get("description") or ent_id
-        
+
         # Calculate circular position
         angle = (2 * math.pi * i) / n if n > 0 else 0
         x = 400 + r * math.cos(angle)
         y = 300 + r * math.sin(angle)
-        
+
         node = {
             "id": ent_id,
             "type": "custom" if ent_type in ["PARTY", "OBLIGATION"] else "default",
@@ -31,17 +31,17 @@ def convert_to_react_flow(entities: list, relationships: list) -> Tuple[list, li
             "position": {"x": round(x, 1), "y": round(y, 1)}
         }
         nodes.append(node)
-        
+
     for i, rel in enumerate(relationships):
         if not isinstance(rel, dict):
             continue
         source = rel.get("source")
         target = rel.get("target")
         rel_type = rel.get("type", "RELATED_TO")
-        
+
         if not source or not target:
             continue
-            
+
         edge_id = rel.get("id") or f"e_{source}_{target}_{i}"
         edge = {
             "id": edge_id,
@@ -55,7 +55,7 @@ def convert_to_react_flow(entities: list, relationships: list) -> Tuple[list, li
             }
         }
         edges.append(edge)
-        
+
     return nodes, edges
 
 
@@ -78,21 +78,23 @@ def run_knowledge_graph_agent(
 ) -> Dict[str, Any]:
     """
     Extract entities and relationships from contract.
-    
+
     Args:
         contract_id: Contract identifier
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with entities and relationships
     """
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
+    total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
-    if not contract_text.strip():
+
+    if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
                 "entities": [],
@@ -100,7 +102,7 @@ def run_knowledge_graph_agent(
                 "statistics": {"entity_count": 0, "relationship_count": 0}
             },
             retrieval_result=retrieval,
-            reasoning_summary="Retrieval returned empty context",
+            reasoning_summary="Insufficient contract context was retrieved to provide a reliable answer.",
             retrieval_time_ms=retrieval_time_ms,
         )
 
@@ -121,7 +123,7 @@ def run_knowledge_graph_agent(
             llm_time_ms=int((time.time() - llm_start) * 1000), warnings=[sanitize_warning_message(str(exc))],
         )
     llm_time_ms = int((time.time() - llm_start) * 1000)
-    
+
     parsed = safe_parse_json(raw, {})
     if isinstance(parsed, str):
         parsed = safe_parse_json(parsed, {})
@@ -131,7 +133,7 @@ def run_knowledge_graph_agent(
             parsed["entities"] = []
         if "relationships" not in parsed or not isinstance(parsed["relationships"], list):
             parsed["relationships"] = []
-            
+
         # Ensure each entity has a confidence score
         if isinstance(parsed["entities"], list):
             for entity in parsed["entities"]:
@@ -147,7 +149,7 @@ def run_knowledge_graph_agent(
             "node_count": len(nodes),
             "edge_count": len(edges)
         }
-        
+
         return AgentResponseBuilder.success(
             result=parsed,
             retrieval_result=retrieval,
@@ -156,7 +158,7 @@ def run_knowledge_graph_agent(
             llm_time_ms=llm_time_ms,
             **token_usage,
         )
-    
+
     # Fallback
     fallback_result = {
         "entities": [],

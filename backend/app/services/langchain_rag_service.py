@@ -18,7 +18,7 @@ Answer ONLY from the provided context.
 
 If answer not found say:
 
-Information not found in contract.
+I could not find sufficient information in the retrieved contract to answer this question.
 
 Context:
 {context}
@@ -40,7 +40,7 @@ Question:
         )
         if not results:
             return {
-                "answer": "Information not found in contract.",
+                "answer": "I could not find sufficient information in the retrieved contract to answer this question.",
                 "sources": []
             }
 

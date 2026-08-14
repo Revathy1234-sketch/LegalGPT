@@ -49,9 +49,14 @@ REQUIREMENTS:
 - Quantify financial impacts where specified.
 - Flag ambiguities and missing standard protections.
 - Extract exact obligations, exact payment terms, exact governing law, and exact clause titles from the contract.
+- Do not rewrite obligations or add assumptions (e.g., if the contract says "return", do not say "return or destroy").
 - Do not infer missing obligations or dates.
 - Do not fabricate clauses, obligations, deadlines, or business impact.
-- If information is unavailable, state "Not explicitly stated in the contract." — never invent.""",
+- Every factual statement must be supported by the contract.
+- Keep contract FACTS separate from RECOMMENDATIONS. Never present a recommendation as if it were written in the contract.
+- If information is unavailable, state "Not specified in the contract." — never invent.
+- LEGAL GROUNDING RULE: Do not claim that a contract is "legally sound", "legally compliant", "legally valid", or "comprehensive".
+- TEMPLATE RECOGNITION: Recognize if the contract is a TEMPLATE containing placeholders (e.g. [NAME OF INDIVIDUAL], [insert number]). It should not state that a template is legally sound or complete.""",
     contract_placeholder="{contract_text}",
     query_placeholder="{query}",
 )
