@@ -1,15 +1,16 @@
+"use client";
+
 import { AppShell } from "@/src/components/layout/app-shell";
-import { Search, Filter, MoreHorizontal, FileText, CheckCircle2, Bot, Scale, ShieldAlert, GitCompare } from "lucide-react";
+import { Search, Filter, MoreHorizontal, FileText, CheckCircle2, Bot, Scale, ShieldAlert, GitCompare, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { historyApi } from "@/src/lib/api/history";
 
 export default function AnalysisHistory() {
-  const history = [
-    { id: 1, contract: "Master Services Agreement", type: "Contract Insight", status: "Completed", risk: "Low", date: "Oct 24, 2023 10:30 AM", icon: FileText },
-    { id: 2, contract: "Non-Disclosure Agreement", type: "Risk Analysis", status: "Processing", risk: "Medium", date: "Oct 24, 2023 09:15 AM", icon: ShieldAlert },
-    { id: 3, contract: "Software Licensing Agreement", type: "Clause Intelligence", status: "Completed", risk: "High", date: "Oct 23, 2023 04:20 PM", icon: Scale },
-    { id: 4, contract: "Vendor Agreement vs MSA v2", type: "Contract Compare", status: "Completed", risk: "Low", date: "Oct 22, 2023 11:10 AM", icon: GitCompare },
-    { id: 5, contract: "Employment Contract", type: "Contract Chat", status: "Completed", risk: "Low", date: "Oct 20, 2023 02:45 PM", icon: Bot },
-  ];
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['history'],
+    queryFn: historyApi.getAll,
+  });
 
   return (
     <AppShell>
@@ -49,34 +50,63 @@ export default function AnalysisHistory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {history.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-6 py-4 font-semibold text-slate-900">
-                    <Link href="/contracts/1" className="hover:text-blue-600 transition-colors">{item.contract}</Link>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <item.icon className="h-4 w-4 text-slate-400" />
-                      <span className="font-semibold">{item.type}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border shadow-sm ${
-                      item.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                      'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}>
-                      {item.status === 'Completed' && <CheckCircle2 className="h-3 w-3" />}
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-slate-500 font-medium">{item.date}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-200 transition-colors outline-none focus:ring-2 focus:ring-slate-300">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </button>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600 mb-2" />
+                    Loading history...
                   </td>
                 </tr>
-              ))}
+              ) : isError ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-rose-500">
+                    Failed to load history.
+                  </td>
+                </tr>
+              ) : !data || data.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                    No analysis history yet.
+                  </td>
+                </tr>
+              ) : data.map((item) => {
+                const typeName = item.task_type.toLowerCase();
+                const Icon = typeName.includes('upload') ? FileText :
+                             typeName.includes('risk') ? ShieldAlert :
+                             typeName.includes('clause') ? Scale :
+                             typeName.includes('compar') ? GitCompare :
+                             typeName.includes('chat') ? Bot : Info;
+                return (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-6 py-4 font-semibold text-slate-900">
+                      <Link href={`/contracts/${item.contract_id}`} className="hover:text-blue-600 transition-colors">{item.contract_name}</Link>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2 text-slate-700">
+                        <Icon className="h-4 w-4 text-slate-400" />
+                        <span className="font-semibold">{item.task_type}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border shadow-sm ${
+                        item.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
+                        {item.status === 'Completed' && <CheckCircle2 className="h-3 w-3" />}
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 font-medium">
+                      {new Date(item.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <Link href={`/contracts/${item.contract_id}`} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-200 transition-colors outline-none focus:ring-2 focus:ring-slate-300">
+                        <MoreHorizontal className="h-5 w-5 inline-block" />
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

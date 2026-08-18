@@ -29,6 +29,8 @@ from app.schemas.analysis_schemas import (
     CompareRequest,
     CompareResponse,
     ComplianceResponse,
+    NegotiationAnalysisResponse,
+    KnowledgeGraphResponse,
 )
 from app.schemas.schemas import (
     ContractQuestionRequest,
@@ -165,9 +167,15 @@ def run_risk_analysis(
         mitigation_plan = 'Mitigation suggestions compiled. Refer to negotiation suggestions.'
 
     db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).delete()
+    try:
+        raw_score = result.get('overall_score', 0)
+        overall_score = int(float(raw_score))
+    except (ValueError, TypeError):
+        overall_score = 0
+
     db_risk = RiskAnalysis(
         contract_id=contract_id,
-        overall_score=int(result.get('overall_score', 0)),
+        overall_score=overall_score,
         risk_matrix=risks if isinstance(risks, list) else [],
         mitigation_plan=mitigation_plan,
     )
@@ -318,7 +326,7 @@ def run_compliance_analysis(
     }
 
 
-@router.post('/negotiation/{contract_id}')
+@router.post('/negotiation/{contract_id}', response_model=NegotiationAnalysisResponse)
 def run_negotiation_analysis(
     contract_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -412,7 +420,7 @@ def chat_contract(
     return run_chat_agent(str(contract_id), payload.question)
 
 
-@router.post('/knowledge-graph/{contract_id}')
+@router.post('/knowledge-graph/{contract_id}', response_model=KnowledgeGraphResponse)
 def knowledge_graph(
     contract_id: uuid.UUID,
     db: Session = Depends(get_db),

@@ -1,14 +1,13 @@
 "use client";
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { RiskDistribution } from "@/src/lib/api/dashboard";
 
-const data = [
-  { name: "Low Risk", value: 15, color: "#10b981" }, // emerald-500
-  { name: "Medium Risk", value: 6, color: "#f59e0b" }, // amber-500
-  { name: "High Risk", value: 3, color: "#f43f5e" }, // rose-500
-];
+interface Props {
+  data: RiskDistribution[];
+}
 
-export function RiskOverview() {
+export function RiskOverview({ data }: Props) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm flex flex-col h-[380px]">
       <div className="mb-4">

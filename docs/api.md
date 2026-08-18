@@ -18,7 +18,6 @@ Authenticated endpoints require `Authorization: Bearer <token>`.
 | POST | `/contracts/upload` | Upload and index a PDF contract |
 | GET | `/contracts/` | List contracts visible to the current user |
 | GET | `/contracts/{contract_id}` | Retrieve a contract |
-| POST | `/contracts/{contract_id}/ask` | Ask a question about a contract |
 
 ## Analysis agents
 

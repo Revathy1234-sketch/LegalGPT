@@ -64,7 +64,7 @@ def run_summary_agent(
         raw, token_usage = LLMService.invoke(prompt, {
             "contract_text": contract_text,
             "query": query
-        })
+        }, require_json=True)
     except Exception as exc:
         log_exception_context("summary", exc)
         return AgentResponseBuilder.success(

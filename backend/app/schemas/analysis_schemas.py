@@ -51,7 +51,34 @@ class RiskAssessmentResponse(BaseModel):
     mitigation_plan: Optional[str] = None
     confidence: Optional[float] = None
     evaluated_at: datetime
-    
+
     model_config = {
         "from_attributes": True
     }
+
+class NegotiationAnalysisResponse(BaseModel):
+    clauses: Optional[List[dict]] = []
+    risk_matrix: Optional[List[dict]] = []
+    compliance_report: Optional[List[dict]] = []
+    negotiation_suggestions: List[dict]
+
+class KnowledgeGraphEntity(BaseModel):
+    id: str
+    type: str
+    name: Optional[str] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+
+class KnowledgeGraphRelationship(BaseModel):
+    source: str
+    target: str
+    type: Optional[str] = None
+    relationship: Optional[str] = None
+
+class KnowledgeGraphResult(BaseModel):
+    entities: List[KnowledgeGraphEntity]
+    relationships: List[KnowledgeGraphRelationship]
+
+class KnowledgeGraphResponse(BaseModel):
+    success: bool
+    result: KnowledgeGraphResult

@@ -27,25 +27,25 @@ def run_chat_agent(
 ) -> Dict[str, Any]:
     """
     Answer questions about a contract using retrieval + generation.
-    
+
     Args:
         contract_id: Contract identifier
         query: User question/query
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with answer and sources
     """
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, query, top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
     total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
     sources = retrieval.get("sources", [])
     source_references = _source_references(sources)
-    
+
     if total_chunks == 0 or not contract_text.strip():
         return AgentResponseBuilder.success(
             result={
@@ -66,8 +66,8 @@ def run_chat_agent(
     try:
         raw, token_usage = LLMService.invoke(prompt, {
             "contract_text": contract_text,
-            "question": query
-        })
+            "question": query,
+        }, require_json=True)
     except Exception as exc:
         log_exception_context("chat", exc)
         return AgentResponseBuilder.success(
@@ -77,7 +77,7 @@ def run_chat_agent(
             llm_time_ms=int((time.time() - llm_start) * 1000), warnings=[sanitize_warning_message(str(exc))],
         )
     llm_time_ms = int((time.time() - llm_start) * 1000)
-    
+
     parsed = safe_parse_json(raw, {})
     if isinstance(parsed, str):
         parsed = safe_parse_json(parsed, {})

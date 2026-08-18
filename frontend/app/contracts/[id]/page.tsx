@@ -1,8 +1,20 @@
-import { FileText, AlertTriangle, Scale, Clock } from "lucide-react";
+"use client";
+
+import { use } from "react";
+import { FileText, AlertTriangle, Scale, Clock, Loader2 } from "lucide-react";
 import { StatCard } from "@/src/components/dashboard/stat-card";
 import { RiskOverview } from "@/src/components/dashboard/risk-overview";
+import { useQuery } from "@tanstack/react-query";
+import { analysisApi } from "@/src/lib/api/analysis";
 
-export default function ContractOverview() {
+export default function ContractOverview({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['summary', resolvedParams.id],
+    queryFn: () => analysisApi.summarize(resolvedParams.id),
+  });
+
   return (
     <div className="space-y-6">
       <div className="mb-6">
@@ -10,44 +22,52 @@ export default function ContractOverview() {
         <p className="text-slate-500 mt-1 font-medium">High-level summary and metrics for this document.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Clauses"
-          value={42}
-          icon={<FileText className="h-5 w-5" />}
-        />
-        <StatCard
-          title="High Risk Clauses"
-          value={3}
-          icon={<AlertTriangle className="h-5 w-5" />}
-          trend={{ value: "Action required", isPositive: false }}
-        />
-        <StatCard
-          title="Obligations"
-          value={15}
-          icon={<Scale className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Key Dates"
-          value={4}
-          icon={<Clock className="h-5 w-5" />}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Executive Summary</h3>
-          <div className="prose prose-sm prose-slate max-w-none text-slate-600 leading-relaxed font-serif">
-            <p className="mb-4">
-              This Master Services Agreement outlines the terms under which the Service Provider will deliver consulting services to the Client. The agreement establishes a framework for future statements of work (SOWs) and governs intellectual property rights, confidentiality, and liability limitations.
-            </p>
-            <p>
-              The contract generally follows standard market practices, but includes a heavily negotiated limitation of liability clause that caps damages at 2x the annual fees. The confidentiality provisions are mutual and survive for 5 years post-termination.
-            </p>
-          </div>
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
+          <p>Analyzing contract...</p>
         </div>
-        <RiskOverview />
-      </div>
+      ) : isError ? (
+        <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-rose-600">
+          Failed to load contract overview.
+        </div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="Total Clauses"
+              value={data.clauses?.length || 0}
+              icon={<FileText className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Risk Score"
+              value={data.risk_analysis?.overall_score || 0}
+              icon={<AlertTriangle className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Obligations"
+              value={0}
+              icon={<Scale className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Key Dates"
+              value={0}
+              icon={<Clock className="h-5 w-5" />}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Executive Summary</h3>
+              <div className="prose prose-sm prose-slate max-w-none text-slate-600 leading-relaxed font-serif whitespace-pre-wrap">
+                {data.summary || "No summary available."}
+              </div>
+            </div>
+            {/* Reusing RiskOverview but passing empty data for now, since summarize API doesn't return full distribution */}
+            <RiskOverview data={[]} />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

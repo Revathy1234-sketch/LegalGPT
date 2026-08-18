@@ -71,24 +71,24 @@ RISK_WEIGHTS = {
 def extract_first_json_block(text: str) -> str | None:
     if not text:
         return None
-    
+
     idx_brace = text.find("{")
     idx_bracket = text.find("[")
-    
+
     if idx_brace == -1 and idx_bracket == -1:
         return None
-    
+
     if idx_brace != -1 and idx_bracket != -1:
         start_idx = min(idx_brace, idx_bracket)
     elif idx_brace != -1:
         start_idx = idx_brace
     else:
         start_idx = idx_bracket
-        
+
     stack = []
     in_string = False
     escape = False
-    
+
     for idx in range(start_idx, len(text)):
         char = text[idx]
         if escape:
@@ -130,11 +130,11 @@ def repair_truncated_json(s: str) -> str:
     s = s.strip()
     if not s:
         return s
-    
+
     stack = []
     in_string = False
     escape = False
-    
+
     repaired = []
     for idx, char in enumerate(s):
         if escape:
@@ -149,7 +149,7 @@ def repair_truncated_json(s: str) -> str:
             in_string = not in_string
             repaired.append(char)
             continue
-        
+
         if not in_string:
             if char in "{[":
                 stack.append(char)
@@ -159,19 +159,19 @@ def repair_truncated_json(s: str) -> str:
                     if (last == "{" and char == "}") or (last == "[" and char == "]"):
                         stack.pop()
         repaired.append(char)
-        
+
     if in_string:
         if escape:
             repaired.pop()
         repaired.append('"')
-        
+
     while stack:
         last = stack.pop()
         if last == "{":
             repaired.append("}")
         elif last == "[":
             repaired.append("]")
-            
+
     return "".join(repaired)
 
 
@@ -293,10 +293,10 @@ def parse_json_safe(raw_text: str, default: Any = None) -> Any:
                 balanced = balance_brackets(sub)
                 if not balanced:
                     continue
-                
+
                 # Clean potential malformed commas in the balanced version
                 balanced_clean = re.sub(r',(\s*[}\]])', r'\1', balanced)
-                
+
                 for cand in (balanced, balanced_clean):
                     try:
                         res = json.loads(cand)
@@ -330,27 +330,7 @@ def snippet_for_clause(contract_text: str, clause_type: str) -> str:
     return ""
 
 
-def build_clause_extraction_fallback(contract_text: str) -> List[Dict[str, Any]]:
-    extracted: List[Dict[str, Any]] = []
-    for clause_type in CLAUSE_TYPES:
-        snippet = snippet_for_clause(contract_text, clause_type)
-        if snippet:
-            extracted.append(
-                {
-                    "clause_type": clause_type,
-                    "original_text": snippet,
-                    "confidence_score": 0.75,
-                }
-            )
-    if not extracted and contract_text.strip():
-        extracted.append(
-            {
-                "clause_type": "General",
-                "original_text": contract_text.strip()[:1000],
-                "confidence_score": 0.5,
-            }
-        )
-    return extracted
+
 
 
 def get_workflow_next_agent(state: AgentState, default: str) -> str:
@@ -389,7 +369,7 @@ You are a Contract Analysis Agent. Your task is to analyze the following contrac
 Provide a comprehensive analysis detailing the contract type, key parties, duration, and summary.
 
 Contract Text:
-{text[:15000]}
+{text}
 """
 
     try:
@@ -447,13 +427,13 @@ Output format:
 ]
 
 Contract Text:
-{text[:15000]}
+{text}
 """
 
     extracted: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {})
+        res_text, _ = LLMService.invoke(prompt, {}, require_json=True)
         logger.debug("\nRAW LLM RESPONSE:\n%s", res_text)
         parsed = parse_json_safe(res_text, [])
         if isinstance(parsed, list):
@@ -469,8 +449,7 @@ Contract Text:
     except Exception as e:
         logger.error("CLAUSE EXTRACTION ERROR: %s", str(e))
 
-    if not extracted:
-        extracted = build_clause_extraction_fallback(text)
+
 
     logger.info("clause_extraction_node | Next Node: %s", next_agent)
     logger.info("Clause Count: %d | Risk Count: 0 | Compliance Count: 0 | Negotiation Count: 0", len(extracted))
@@ -478,99 +457,7 @@ Contract Text:
     return {**state, "extracted_clauses": extracted, "next_agent": next_agent}
 
 
-def analyze_risks_from_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    clause_map = {clause.get("clause_type", "").strip().lower(): clause for clause in clauses}
-    risk_matrix: List[Dict[str, Any]] = []
 
-    def add_risk(level: str, clause_type: str, issue: str, impact: str, mitigation: str):
-        risk_matrix.append(
-            {
-                "risk_level": level,
-                "clause_type": clause_type,
-                "issue": issue,
-                "impact": impact,
-                "mitigation": mitigation,
-            }
-        )
-
-    if "indemnification" not in clause_map:
-        add_risk(
-            "High",
-            "Indemnification",
-            "Missing indemnification clause.",
-            "Exposure to third-party claims without obligation to defend or indemnify.",
-            "Include reciprocal indemnification language for both parties.",
-        )
-
-    liability = clause_map.get("limitation of liability")
-    if not liability or not re.search(r"liability cap|cap on liability|limit.*liabilit|limit.*loss", liability.get("original_text", ""), re.I):
-        add_risk(
-            "High",
-            "Limitation of Liability",
-            "Missing or unclear liability cap.",
-            "Potential unlimited damages exposure.",
-            "Add a clear, mutual liability cap tied to fees paid or a fixed amount.",
-        )
-
-    if "governing law" not in clause_map:
-        add_risk(
-            "Medium",
-            "Governing Law",
-            "Governing law clause is absent.",
-            "Uncertainty over applicable jurisdiction and dispute resolution.",
-            "Specify a governing law and jurisdiction in the contract.",
-        )
-
-    confidentiality = clause_map.get("confidentiality")
-    if not confidentiality:
-        add_risk(
-            "Medium",
-            "Confidentiality",
-            "No confidentiality clause was detected.",
-            "Risk of unauthorized disclosure of sensitive information.",
-            "Add a strong confidentiality clause with permitted disclosures and obligations.",
-        )
-    else:
-        text = confidentiality.get("original_text", "")
-        if re.search(r"as is|without warranty|no obligation to protect|disclos.*third party|not responsible for confidentiality", text, re.I):
-            add_risk(
-                "Medium",
-                "Confidentiality",
-                "Confidentiality clause appears weak.",
-                "Sensitive data may be shared or used without adequate protection.",
-                "Tighten confidentiality terms and limit permitted disclosures.",
-            )
-
-    payment = clause_map.get("payment terms")
-    if not payment or not re.search(r"within \d+ days|due upon|due within|payment shall be|invoice", payment.get("original_text", ""), re.I):
-        add_risk(
-            "High",
-            "Payment Terms",
-            "Unclear or missing payment terms.",
-            "Billing disputes and cash flow problems could arise.",
-            "Define exact payment deadlines, invoicing procedures, and consequences for late payment.",
-        )
-
-    termination = clause_map.get("termination")
-    if termination and re.search(r"sole discretion|only.*party|unilateral|without cause.*only by", termination.get("original_text", ""), re.I):
-        add_risk(
-            "High",
-            "Termination",
-            "Termination rights appear one-sided.",
-            "One party can terminate without fair mutual protection.",
-            "Modify termination language to require mutual rights or cure periods.",
-        )
-
-    if not risk_matrix:
-        add_risk(
-            "Low",
-            clauses[0].get("clause_type", "General") if clauses else "General",
-            "No major risks were identified from available clauses.",
-            "The clause set appears generally acceptable.",
-            "Continue review with legal counsel for business-specific risks.",
-        )
-
-    return risk_matrix
 
 
 def risk_analysis_node(state: AgentState) -> Dict[str, Any]:
@@ -621,7 +508,7 @@ Clauses:
     risk_matrix: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {})
+        res_text, _ = LLMService.invoke(prompt, {}, require_json=True)
         logger.debug("\nRAW RISK RESPONSE:\n%s", res_text)
         parsed = parse_json_safe(res_text, [])
         if isinstance(parsed, list):
@@ -639,34 +526,7 @@ Clauses:
     except Exception as e:
         logger.exception("RISK ANALYSIS ERROR: %s", str(e))
 
-    required_clauses = [
-        "Termination",
-        "Confidentiality",
-        "Payment Terms",
-        "Indemnification",
-        "Limitation of Liability",
-        "Governing Law",
-        "Dispute Resolution",
-        "Force Majeure",
-        "Intellectual Property",
-        "Data Protection",
-    ]
 
-    clause_map = {clause.get("clause_type", "").strip().lower(): clause for clause in clauses}
-    for clause_name in required_clauses:
-        if clause_name.strip().lower() not in clause_map:
-            risk_matrix.append(
-                {
-                    "risk_level": "High",
-                    "clause_type": clause_name,
-                    "issue": f"Missing {clause_name.lower()} clause.",
-                    "impact": "Exposure to undefined obligations and legal risk.",
-                    "mitigation": f"Add a clear {clause_name.lower()} clause that defines obligations and protections.",
-                }
-            )
-
-    if not risk_matrix:
-        risk_matrix = analyze_risks_from_clauses(clauses)
 
     overall_score = 100
     for risk in risk_matrix:
@@ -764,7 +624,7 @@ Clauses:
     compliance_report: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {})
+        res_text, _ = LLMService.invoke(prompt, {}, require_json=True)
         logger.debug("\nRAW COMPLIANCE RESPONSE:\n%s", res_text)
         parsed = parse_json_safe(res_text, [])
         if isinstance(parsed, list):
@@ -909,7 +769,7 @@ Compliance Report:
 def judge_node(state: AgentState) -> Dict[str, Any]:
     iterations = state.get("iterations", 0) or 0
     iterations += 1
-    
+
     next_agent = state.get("next_agent", "end")
     if next_agent is None:
         next_agent = "end"
@@ -919,7 +779,7 @@ def judge_node(state: AgentState) -> Dict[str, Any]:
     if iterations > 10:
         logger.warning("Max supervisor iterations (10) exceeded. Terminating to prevent infinite loop.")
         next_agent = "end"
-        
+
     valid_agents = ["analysis", "extraction", "risk", "compliance", "negotiation", "end"]
     if next_agent not in valid_agents:
         logger.warning("Invalid next_agent routed: '%s'. Forcing destination 'end'.", next_agent)

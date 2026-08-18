@@ -33,14 +33,14 @@ class LLMProviderException(Exception):
 try:
     import langchain_google_genai.chat_models as langchain_chat_models
     import tenacity
-    
+
     def _create_no_retry_decorator() -> tenacity.retry:
         return tenacity.retry(
             reraise=True,
             stop=tenacity.stop_after_attempt(1),
             retry=tenacity.retry_if_exception_type(Exception),
         )
-    
+
     langchain_chat_models._create_retry_decorator = _create_no_retry_decorator
     logger.info("Successfully monkeypatched langchain_google_genai to disable internal tenacity retries.")
 except Exception as patch_err:
@@ -50,7 +50,8 @@ except Exception as patch_err:
 
 class LLMService:
     @staticmethod
-    def get_model() ->  Any:
+    def get_model(require_json: bool = False) ->  Any:
+        model_kwargs = {"response_mime_type": "application/json"} if require_json else {}
         return ChatGoogleGenerativeAI(
             model=settings.GEMINI_MODEL,
             google_api_key=settings.GEMINI_API_KEY,
@@ -58,6 +59,7 @@ class LLMService:
             max_output_tokens=1500,
             timeout=60,
             max_retries=0,
+            model_kwargs=model_kwargs
         )
 
     @staticmethod
@@ -101,7 +103,7 @@ class LLMService:
     @staticmethod
     def unpack_response(response: Any) -> Tuple[str, Dict[str, int]]:
         """Return text and normalized token usage from a provider response."""
-        
+
         def extract_text(resp: Any) -> str:
             def is_mock(obj: Any) -> bool:
                 return type(obj).__name__ in ("MagicMock", "Mock", "NonCallableMagicMock", "NonCallableMock")
@@ -227,7 +229,7 @@ class LLMService:
         return str(prompt)
 
     @classmethod
-    def _invoke_gemini(cls, prompt: Any, inputs: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
+    def _invoke_gemini(cls, prompt: Any, inputs: Dict[str, Any], require_json: bool = False) -> Tuple[str, Dict[str, int]]:
         if ChatGoogleGenerativeAI is None:
             raise RuntimeError("Gemini client is unavailable")
 
@@ -237,7 +239,7 @@ class LLMService:
         for attempt in range(max_attempts):
             try:
                 logger.info("Using Gemini for LLM invocation (attempt %s)", attempt + 1)
-                model = cls.get_model()
+                model = cls.get_model(require_json=require_json)
                 # If the prompt is a plain string (as in unit tests), invoke the model directly.
                 if isinstance(prompt, str):
                     response = model.invoke(cls._render_prompt(prompt, inputs))
@@ -267,10 +269,14 @@ class LLMService:
         raise RuntimeError("Gemini unavailable after retries")
 
     @classmethod
-    def _invoke_nvidia(cls, prompt: Any, inputs: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
+    def _invoke_nvidia(cls, prompt: Any, inputs: Dict[str, Any], require_json: bool = False) -> Tuple[str, Dict[str, int]]:
         client = cls.get_nvidia_client()
         rendered_prompt = cls._render_prompt(prompt, inputs)
         max_attempts = 2
+        kwargs = {}
+        if require_json:
+            kwargs["response_format"] = {"type": "json_object"}
+
         for attempt in range(max_attempts):
             try:
                 logger.info("Using NVIDIA for LLM invocation (attempt %s)", attempt + 1)
@@ -280,6 +286,7 @@ class LLMService:
                     temperature=0,
                     max_tokens=4096,
                     timeout=60,
+                    **kwargs
                 )
                 return cls.unpack_response(response)
             except Exception as exc:
@@ -302,9 +309,13 @@ class LLMService:
         raise RuntimeError("NVIDIA unavailable after retries")
 
     @classmethod
-    def _invoke_openrouter(cls, prompt: Any, inputs: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
+    def _invoke_openrouter(cls, prompt: Any, inputs: Dict[str, Any], require_json: bool = False) -> Tuple[str, Dict[str, int]]:
         client = cls.get_openrouter_client()
         max_attempts = 2
+        kwargs = {}
+        if require_json:
+            kwargs["response_format"] = {"type": "json_object"}
+
         for attempt in range(max_attempts):
             try:
                 logger.info("Using OpenRouter for LLM invocation (attempt %s)", attempt + 1)
@@ -312,6 +323,7 @@ class LLMService:
                     model=settings.OPENROUTER_MODEL,
                     messages=[{"role": "user", "content": cls._render_prompt(prompt, inputs)}],
                     timeout=60,
+                    **kwargs
                 )
                 return cls.unpack_response(response)
             except Exception as exc:
@@ -334,14 +346,14 @@ class LLMService:
         raise RuntimeError("OpenRouter unavailable after retries")
 
     @classmethod
-    def invoke(cls, prompt: Any, inputs: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
+    def invoke(cls, prompt: Any, inputs: Dict[str, Any], require_json: bool = False) -> Tuple[str, Dict[str, int]]:
         """Invoke the LLM provider hierarchy: NVIDIA -> OpenRouter -> Gemini."""
         _invoke_start = time.time()
         provider_used = "nvidia"
         fallback_used = False
         try:
             logger.info("[LLM] Invoking primary provider: NVIDIA")
-            result = cls._invoke_nvidia(prompt, inputs)
+            result = cls._invoke_nvidia(prompt, inputs, require_json=require_json)
         except Exception as nvidia_exc:
             if not cls._is_fallback_error(nvidia_exc):
                 raise
@@ -349,7 +361,7 @@ class LLMService:
             provider_used = "openrouter"
             fallback_used = True
             try:
-                result = cls._invoke_openrouter(prompt, inputs)
+                result = cls._invoke_openrouter(prompt, inputs, require_json=require_json)
             except Exception as open_exc:
                 if not cls._is_fallback_error(open_exc):
                     raise
@@ -357,7 +369,7 @@ class LLMService:
                 provider_used = "gemini"
                 fallback_used = True
                 try:
-                    result = cls._invoke_gemini(prompt, inputs)
+                    result = cls._invoke_gemini(prompt, inputs, require_json=require_json)
                 except Exception as gemini_exc:
                     elapsed_ms = int((time.time() - _invoke_start) * 1000)
                     logger.error(

@@ -106,7 +106,7 @@ def run_risk_analysis(
 
     llm_start = time.time()
     try:
-        raw, token_usage = LLMService.invoke(prompt, {"contract_text": contract_text})
+        raw, token_usage = LLMService.invoke(prompt, {"contract_text": contract_text}, require_json=True)
     except Exception as exc:
         log_exception_context("risk", exc)
         return AgentResponseBuilder.success(

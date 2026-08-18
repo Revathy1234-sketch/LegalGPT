@@ -18,7 +18,7 @@ export function Sidebar() {
           <FileText className="h-4 w-4" />
           Contracts
         </Link>
-        <Link href="/workspace" className="flex items-center gap-3 px-3 py-2.5 rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors">
+        <Link href="/contracts" className="flex items-center gap-3 px-3 py-2.5 rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors">
           <Bot className="h-4 w-4" />
           AI Workspace
         </Link>

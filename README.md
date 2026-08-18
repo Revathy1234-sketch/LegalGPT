@@ -223,7 +223,6 @@ Interactive Swagger documentation is available at `http://127.0.0.1:8000/docs`.
 - `POST /api/v1/contracts/upload`: Upload a PDF contract, extract text, chunk, embed, and index it.
 - `GET /api/v1/contracts/`: List user/organization contracts.
 - `GET /api/v1/contracts/{contract_id}`: Retrieve contract details and metadata.
-- `POST /api/v1/contracts/{contract_id}/ask`: Ask a contract-aware question using RAG.
 
 ### Analysis (Agent Triggers)
 - `POST /api/v1/analysis/summarize/{contract_id}`: Generate an executive summary.
@@ -243,7 +242,7 @@ Interactive Swagger documentation is available at `http://127.0.0.1:8000/docs`.
 4. **Agent Analysis**: User calls `POST /api/v1/analysis/risk/{contract_id}`.
 5. **Execution**: The Risk Agent retrieves context using hybrid search, identifies weaknesses, and calculates a risk score using the active LLM provider.
 6. **Result Storage**: The structured analysis (risk matrix, mitigation plan) is saved to PostgreSQL and returned to the user.
-7. **Q&A**: User calls `POST /api/v1/contracts/{contract_id}/ask` with a specific question. The system returns a grounded answer with citations to specific contract chunks.
+7. **Q&A**: User calls `POST /api/v1/analysis/chat/{contract_id}` with a specific question. The system returns a grounded answer with citations to specific contract chunks.
 
 ## Example Analysis (Test Output)
 
@@ -279,7 +278,6 @@ Interactive Swagger documentation is available at `http://127.0.0.1:8000/docs`.
 ## Future Scope
 
 The following features are planned for future iterations (currently **not implemented**):
-- **React Frontend**: A web-based UI for visualizing contract data and chat.
 - **Voice Interaction**: Speech-to-text contract querying.
 - **Human-in-the-loop**: Features for lawyers to manually override or correct agent findings.
 - **Cloud Object Storage**: Migrating from local file storage to AWS S3 / GCP Cloud Storage.

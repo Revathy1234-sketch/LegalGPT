@@ -113,7 +113,7 @@ def run_knowledge_graph_agent(
 
     llm_start = time.time()
     try:
-        raw, token_usage = LLMService.invoke(prompt, {"contract_text": contract_text})
+        raw, token_usage = LLMService.invoke(prompt, {"contract_text": contract_text}, require_json=True)
     except Exception as exc:
         log_exception_context("knowledge_graph", exc)
         return AgentResponseBuilder.success(

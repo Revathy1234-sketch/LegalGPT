@@ -109,7 +109,7 @@ def _run_comparison_internal(
 
     llm_start = time.time()
     try:
-        raw, token_usage = LLMService.invoke(prompt, {"contract_text": combined})
+        raw, token_usage = LLMService.invoke(prompt, {"contract_text": combined}, require_json=True)
     except Exception as exc:
         log_exception_context("comparison", exc)
         return {
@@ -137,7 +137,7 @@ def _run_comparison_internal(
             parsed["risk_differences"] = []
         if "summary" not in parsed:
             parsed["summary"] = ""
-        
+
         return {
             'result': parsed,
             'retrieval_result': combined_retrieval,
@@ -173,16 +173,16 @@ def run_comparison_agent(
 ) -> Dict[str, Any]:
     """
     Compare two contracts.
-    
+
     Note: This function is wrapped separately from the enterprise wrapper
     because it takes two contract IDs rather than one.
-    
+
     Args:
         contract_a_id: First contract identifier
         contract_b_id: Second contract identifier
         top_k: Number of top chunks to retrieve per contract
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with comparison analysis
     """
@@ -197,12 +197,12 @@ def run_comparison_agent(
         create_error_response,
         wrap_agent_response,
     )
-    
+
     # Initialize tracking
     logger = AgentExecutionLogger(AgentType.COMPARISON.value)
     tracker = ProcessingTimeTracker()
     tracker.start_total()
-    
+
     # Validate UUID format
     if not is_valid_uuid(contract_a_id) or not is_valid_uuid(contract_b_id):
         return create_error_response(
@@ -258,11 +258,11 @@ def run_comparison_agent(
             request_id=request_id,
             contract_id=f"{contract_a_id},{contract_b_id}"
         )
-    
+
     try:
         # Execute comparison
         agent_result = _run_comparison_internal(contract_a_id, contract_b_id, top_k)
-        
+
         # Extract components
         result_data = agent_result.get('result', {})
         retrieval_data = agent_result.get('retrieval_result', {})
@@ -270,27 +270,27 @@ def run_comparison_agent(
         retrieval_time_ms = agent_result.get('retrieval_time_ms', 0)
         llm_time_ms = agent_result.get('llm_time_ms', 0)
         warnings = agent_result.get('warnings', [])
-        
+
         # Track times
         tracker.add_retrieval_time(retrieval_time_ms)
         tracker.add_llm_time(llm_time_ms)
-        
+
         logger.log_retrieval(
             retrieval_time_ms,
             retrieval_data.get('total_chunks', 0),
             retrieval_data.get('top_retrieval_score', 0.0),
         )
         logger.log_llm_call(llm_time_ms)
-        
+
         # Sanitize response
         result_data = ResponseValidator.sanitize_response(result_data)
-        
+
         # Build citations
         citations = CitationBuilder.build_from_retrieval_result(retrieval_data)
-        
+
         # Build retrieval metadata
         retrieval_metadata = RetrievalMetadataBuilder.build_from_retrieval_result(retrieval_data)
-        
+
         # Calculate confidence
         confidence_score, confidence_level, confidence_breakdown = (
             ConfidenceCalculator.calculate_confidence(
@@ -301,10 +301,10 @@ def run_comparison_agent(
                 retrieved_successfully=len(citations) > 0,
             )
         )
-        
+
         # Get processing metrics
         metrics = tracker.get_metrics()
-        
+
         # Create response
         response = wrap_agent_response(
             agent=AgentType.COMPARISON,
@@ -320,7 +320,7 @@ def run_comparison_agent(
             request_id=request_id,
             contract_id=f"{contract_a_id},{contract_b_id}",
         )
-        
+
         # Validate the completed enterprise wrapper, not the intermediate
         # comparison result dictionary.
         is_valid, validation_errors = ResponseValidator.validate_response(response)
@@ -334,7 +334,7 @@ def run_comparison_agent(
             confidence_score,
             confidence_level,
         )
-        
+
         # Log metrics
         ExecutionMetricsLogger.log_agent_metrics(
             agent=AgentType.COMPARISON,
@@ -345,16 +345,16 @@ def run_comparison_agent(
             confidence=confidence_score,
             success=True,
         )
-        
+
         return response
-    
+
     except Exception as e:
         # Handle errors
         error_msg = str(e)
         error_type = type(e).__name__
-        
+
         logger.log_error(error_msg, error_type)
-        
+
         ExecutionMetricsLogger.log_agent_metrics(
             agent=AgentType.COMPARISON,
             contract_id=f"{contract_a_id},{contract_b_id}",
@@ -365,7 +365,7 @@ def run_comparison_agent(
             success=False,
             error=error_msg,
         )
-        
+
         return create_error_response(
             agent=AgentType.COMPARISON,
             error_code=ErrorCode.INTERNAL_SERVER_ERROR,

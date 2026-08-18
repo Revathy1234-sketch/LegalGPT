@@ -137,20 +137,20 @@ def run_clause_agent(
 ) -> Dict[str, Any]:
     """
     Extract and categorize clauses from contract.
-    
+
     Args:
         contract_id: Contract identifier
         query: Search query (default: "clauses")
         top_k: Number of top chunks to retrieve
         request_id: Optional request ID for tracing
-        
+
     Returns:
         Enterprise response with extracted clauses
     """
     retrieval_start = time.time()
     retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
-    
+
     total_chunks = retrieval.get("total_chunks", 0)
     contract_text = retrieval.get("context", "")
     chunks = retrieval.get("chunks", [])
@@ -175,7 +175,8 @@ def run_clause_agent(
             {
                 "contract_text": contract_text,
                 "query": query
-            }
+            },
+            require_json=True
         )
     except Exception as exc:
         log_exception_context("clauses", exc)
@@ -187,9 +188,9 @@ def run_clause_agent(
             llm_time_ms=int((time.time() - llm_start) * 1000),
             warnings=[sanitize_warning_message(str(exc))],
         )
-    
+
     llm_time_ms = int((time.time() - llm_start) * 1000)
-    
+
     parsed = safe_parse_json(raw, {})
     if isinstance(parsed, str):
         parsed = safe_parse_json(parsed, {})
