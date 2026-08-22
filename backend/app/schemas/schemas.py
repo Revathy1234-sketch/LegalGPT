@@ -14,8 +14,7 @@ class OrganizationResponse(OrganizationBase):
     id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # User schemas
 class UserBase(BaseModel):
@@ -87,8 +86,7 @@ class ClauseResponse(ClauseBase):
     id: UUID
     contract_id: UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ClauseUpdate(BaseModel):
     modified_text: str
@@ -105,8 +103,7 @@ class RiskAnalysisResponse(RiskAnalysisBase):
     contract_id: UUID
     evaluated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Contract schemas
 class ContractBase(BaseModel):
@@ -122,8 +119,7 @@ class ContractResponse(ContractBase):
     clauses: List[ClauseResponse] = []
     risk_analysis: Optional[RiskAnalysisResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ContractQuestionSource(BaseModel):
     parent_id: str
@@ -132,8 +128,7 @@ class ContractQuestionSource(BaseModel):
     parent_text: str
     relevance_score: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ContractQuestionRequest(BaseModel):
     question: str
@@ -143,8 +138,7 @@ class ContractQuestionResponse(BaseModel):
     confidence: float
     sources: List[ContractQuestionSource]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ContractSummaryResponse(BaseModel):
     contract_id: UUID
@@ -166,8 +160,7 @@ class ExtractedClause(BaseModel):
 class ClauseExtractionResponse(BaseModel):
     clauses: List[ExtractedClause]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ComplianceIssue(BaseModel):
     framework: str
@@ -180,8 +173,8 @@ class ComplianceResponse(BaseModel):
     issues: List[ComplianceIssue]
     recommendations: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 class CompareRequest(BaseModel):
     contract_a_id: UUID
     contract_b_id: UUID
@@ -193,8 +186,7 @@ class CompareResponse(BaseModel):
     risk_differences: List[str]
     summary: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Chat schemas
 class ChatMessageBase(BaseModel):
@@ -210,8 +202,7 @@ class ChatMessageResponse(ChatMessageBase):
     session_id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ChatSessionResponse(BaseModel):
     id: UUID
@@ -220,5 +211,4 @@ class ChatSessionResponse(BaseModel):
     created_at: datetime
     messages: List[ChatMessageResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

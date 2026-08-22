@@ -43,3 +43,6 @@ coverage/
 .vscode/
 .DS_Store
 Thumbs.db
+# Test contract fixtures
+backend/contract_*.pdf
+contract_*.pdf

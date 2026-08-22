@@ -153,11 +153,14 @@ DOCUMENT:
         db.refresh(db_contract)
 
     except Exception as e:
-        db_contract.status = "Error"
-        db_contract.summary = f"Error processing contract: {str(e)}"
-
-        db.commit()
-        db.refresh(db_contract)
+        try:
+            db.rollback()  # Reset any poisoned transaction state before attempting the error commit
+            db_contract.status = "Error"
+            db_contract.summary = f"Error processing contract: {str(e)}"
+            db.commit()
+            db.refresh(db_contract)
+        except Exception as commit_err:
+            logger.error("Failed to persist contract error state: %s", commit_err)
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

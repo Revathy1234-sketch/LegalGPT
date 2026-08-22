@@ -7,20 +7,14 @@ class Settings(BaseSettings):
     # =========================
     # Database
     # =========================
-    DATABASE_URL: str = (
-        "postgresql://postgres:postgres@localhost:5432/legalgpt"
-    )
+    DATABASE_URL: str
 
     # =========================
     # Authentication
     # =========================
-    SECRET_KEY: str = (
-        "legalgpt_super_secret_signing_key_change_me_in_prod"
-    )
+    SECRET_KEY: str
 
-    JWT_SECRET: str = (
-        "legalgpt_secret_key_change_me_in_prod"
-    )
+    JWT_SECRET: str
 
     ALGORITHM: str = "HS256"
 

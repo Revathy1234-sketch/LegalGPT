@@ -148,7 +148,8 @@ def run_clause_agent(
         Enterprise response with extracted clauses
     """
     retrieval_start = time.time()
-    retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
+    effective_query = "indemnification, liability, termination, privacy, governing law, payment, term" if query == "*" or query == "clauses" else query
+    retrieval = retrieve_contract_context(contract_id, effective_query, top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
 
     total_chunks = retrieval.get("total_chunks", 0)
@@ -194,6 +195,9 @@ def run_clause_agent(
     parsed = safe_parse_json(raw, {})
     if isinstance(parsed, str):
         parsed = safe_parse_json(parsed, {})
+
+    if isinstance(parsed, dict) and "error" in parsed:
+        raise ValueError(f"JSON Parsing Failed: {parsed['reason']}\nRaw Output:\n{parsed['raw_response']}")
 
     if isinstance(parsed, dict):
         clauses = parsed.get("clauses", [])
@@ -288,30 +292,8 @@ def run_clause_agent(
             })
 
     if not standardized_clauses:
-        # Fallback to regex snippet extraction
-        from app.agents.nodes import build_clause_extraction_fallback
-        fallback_items = build_clause_extraction_fallback(contract_text)
-        for item in fallback_items:
-            cat = item.get("clause_type") or "unknown"
-            content = item.get("original_text", "")
-            completeness = _estimate_completeness(content)
-            standardized_clauses.append({
-                "title": cat,
-                "category": map_category(cat),
-                "content": content,
-                "confidence_score": _compute_confidence(0.5, completeness),
-                "citations": [{"chunk_id": cm["chunk_id"], "page": cm["page"]} for cm in chunk_meta[:2]] if chunk_meta else [],
-            })
-
-    if not standardized_clauses:
-        # Hard fallback
-        standardized_clauses.append({
-            "title": "General",
-            "category": "Other",
-            "content": contract_text[:1000].strip(),
-            "confidence_score": 0.3,
-            "citations": [],
-        })
+        # User requested to return clear insufficient-evidence rather than invented legal info.
+        pass
 
     return AgentResponseBuilder.success(
         result={"clauses": standardized_clauses},

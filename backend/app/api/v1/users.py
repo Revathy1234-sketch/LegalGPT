@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import uuid
 
 from app.api.v1.auth import get_current_user
@@ -16,8 +16,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_superuser: bool = False
 
-    class Config:
-        from_attributes = True  # Pydantic v2 equivalent of orm_mode
+    model_config = ConfigDict(from_attributes=True)
 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_user)):

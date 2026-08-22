@@ -107,10 +107,20 @@ class VectorService:
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         if not scores:
             return []
+
+        # If max score is 0 or less, they're all 0 bounds
         max_score = max(scores)
         if max_score <= 0:
             return [0.0 for _ in scores]
-        return [float(score) / float(max_score) for score in scores]
+
+        # BM25 scores can be arbitrarily high, but we shouldn't normalize semantic scores
+        # that are already cosine similarity. To be safe, if max > 1.0 (BM25), we normalize to 1.0.
+        # If max <= 1.0 (Cosine Similarity), we leave them as absolute scores!
+        if max_score > 1.0:
+            return [float(score) / float(max_score) for score in scores]
+
+        # For Cosine Similarity, just return the raw scores (bounded -1 to 1, we cap at 0 minimum)
+        return [max(float(score), 0.0) for score in scores]
 
     def _get_embedding(self, text: str) -> List[float]:
         if not self._ensure_model():
@@ -313,7 +323,7 @@ class VectorService:
                     relevance_source="semantic"
                 )
                 db.add(db_embedding)
-            db.commit()
+            db.flush()  # Flush within the caller's transaction; don't commit here
 
         logger.info("Indexed %s chunks for contract_id=%s", len(chunks), contract_id)
 

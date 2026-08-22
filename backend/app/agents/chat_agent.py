@@ -104,6 +104,21 @@ def run_chat_agent(
     # Calculate confidence & citations
     top_score = max([float(src.get("score") or 0.0) for src in sources], default=0.0)
     similarity = min(max(top_score, 0.0), 1.0)
+
+    # --- DETERMINISTIC GROUNDING GATE ---
+    if similarity < 0.22:
+        return AgentResponseBuilder.success(
+            result={
+                "success": False,
+                "grounded": False,
+                "answer": "I could not find sufficient information in the retrieved contract to answer this question.",
+                "citations": []
+            },
+            retrieval_result=retrieval,
+            reasoning_summary="Retrieval confidence below threshold. Answer generation aborted.",
+            retrieval_time_ms=retrieval_time_ms,
+        )
+
     answer_text = _extract_answer(parsed, raw)
     completeness = 0.0
     if answer_text:

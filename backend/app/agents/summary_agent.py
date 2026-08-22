@@ -33,7 +33,9 @@ def run_summary_agent(
         critical_clauses, and business_impact
     """
     retrieval_start = time.time()
-    retrieval = retrieve_contract_context(contract_id, "*", top_k=top_k)
+    # Use a targeted semantic query instead of a wildcard to ensure relevant chunks are pulled
+    effective_query = "contract term, contract value, governing law, jurisdiction, parties" if query == "*" or query == "summary" else query
+    retrieval = retrieve_contract_context(contract_id, effective_query, top_k=top_k)
     retrieval_time_ms = int((time.time() - retrieval_start) * 1000)
 
     total_chunks = retrieval.get("total_chunks", 0)

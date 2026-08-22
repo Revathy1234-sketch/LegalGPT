@@ -73,6 +73,12 @@ def login(
 
         access_token = create_access_token(subject=user.id)
         return {"access_token": access_token, "token_type": "bearer"}
-    except Exception:
-        logger.exception("Login request failed")
+    except HTTPException:
         raise
+    except Exception:
+        logger.exception("Login request failed due to an internal error")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

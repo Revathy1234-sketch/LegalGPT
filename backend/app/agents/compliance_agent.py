@@ -160,20 +160,18 @@ def run_compliance_agent(
             **token_usage,
         )
 
-    # Fallback with extended compliance mapping
-    extended_fallback_result = {
-        "compliant": False,
-        "issues": [],
-        "recommendations": [],
-        "applicable_frameworks": [],
-        "contract_type": "Unknown",
-        "framework": "LegalGPT Compliance Framework",
-        "clause_type": "Compliance",
-        "status": "Non-Compliant",
-        "gap_analysis": []
-    }
     return AgentResponseBuilder.success(
-        result=extended_fallback_result,
+        result={
+            "compliant": False,
+            "issues": [],
+            "recommendations": [],
+            "applicable_frameworks": [],
+            "contract_type": "Unknown",
+            "framework": "LegalGPT Compliance Framework",
+            "clause_type": "Compliance",
+            "status": "Non-Compliant",
+            "gap_analysis": []
+        },
         retrieval_result=retrieval,
         reasoning_summary="Compliance analysis returned default structure",
         retrieval_time_ms=retrieval_time_ms,

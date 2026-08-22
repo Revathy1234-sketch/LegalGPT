@@ -315,8 +315,17 @@ def parse_json_safe(raw_text: str, default: Any = None) -> Any:
                     except Exception:
                         pass
 
-    logger.warning("Failed to parse JSON from response; returning default value")
-    return default
+    # If we fall through, we capture the exception exactly to know why json.loads failed on the cleaned text
+    try:
+        json.loads(text)
+        error_msg = "Unknown error"
+    except Exception as e:
+        error_msg = str(e)
+
+    logger.error(f"Failed to parse JSON from response. Reason: {error_msg}. Raw Text:\n{raw_text}")
+
+    # Return explicit structured error state instead of swallowing it with default
+    return {"error": "JSON parsing failed", "reason": error_msg, "raw_response": raw_text}
 
 
 def snippet_for_clause(contract_text: str, clause_type: str) -> str:
@@ -394,7 +403,7 @@ def clause_extraction_node(state: AgentState) -> Dict[str, Any]:
     logger.debug("TEXT LENGTH: %d", len(text))
     logger.debug("=" * 50)
 
-    prompt = f"""
+    prompt = """
 You are a Clause Extraction Agent.
 Extract the exact full text of each required clause from the contract.
 Required clauses:
@@ -418,13 +427,15 @@ Rules:
 - Return JSON only, with no markdown or explanatory text.
 
 Output format:
-[
-  {{
-    "clause_type":"Termination",
-    "original_text":"...",
-    "confidence_score":0.95
-  }}
-]
+{{
+  "clauses": [
+    {{
+      "clause_type":"Termination",
+      "original_text":"...",
+      "confidence_score":0.95
+    }}
+  ]
+}}
 
 Contract Text:
 {text}
@@ -433,17 +444,19 @@ Contract Text:
     extracted: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {}, require_json=True)
+        res_text, _ = LLMService.invoke(prompt, {"text": text}, require_json=True)
         logger.debug("\nRAW LLM RESPONSE:\n%s", res_text)
-        parsed = parse_json_safe(res_text, [])
-        if isinstance(parsed, list):
+        parsed = parse_json_safe(res_text, {})
+
+        clause_list = parsed.get("clauses", []) if isinstance(parsed, dict) else []
+        if isinstance(clause_list, list):
             extracted = [
                 {
                     "clause_type": item.get("clause_type", "Unknown"),
                     "original_text": item.get("original_text", ""),
                     "confidence_score": float(item.get("confidence_score", 0.0)) if item.get("confidence_score") is not None else 0.0,
                 }
-                for item in parsed
+                for item in clause_list
                 if isinstance(item, dict)
             ]
     except Exception as e:
@@ -477,41 +490,42 @@ def risk_analysis_node(state: AgentState) -> Dict[str, Any]:
     else:
         next_agent = "end"
 
-    prompt = f"""
+    prompt = """
 You are a senior Legal Risk Analysis Agent.
 
 Analyze the following extracted contract clauses.
 
 For each risk return:
-[
-  {{
-    "risk_level":"Low|Medium|High",
-    "clause_type":"...",
-    "issue":"...",
-    "impact":"...",
-    "mitigation":"..."
-  }}
-]
+{{
+  "risks": [
+    {{
+      "risk_level": "Low|Medium|High",
+      "clause_type": "...",
+      "issue": "...",
+      "impact": "...",
+      "mitigation": "..."
+    }}
+  ]
+}}
 
-Use these rules when relevant:
-- Missing Indemnification = High
-- Missing Liability Cap = High
-- Missing Governing Law = Medium
-- Weak Confidentiality = Medium
-- Unclear Payment Terms = High
-- One-sided Termination = High
-
+Assess risk severity objectively based on actual contract evidence. Do not fabricate risk findings.
+Do not assume missing clauses are automatically high risk.
+Distinguish PRESENT, ABSENT, or UNCLEAR provisions based on the provided text.
 Clauses:
-{json.dumps(clauses, indent=2)}
+{clauses}
 """
 
     risk_matrix: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {}, require_json=True)
+        res_text, _ = LLMService.invoke(prompt, {"clauses": json.dumps(clauses, indent=2)}, require_json=True)
         logger.debug("\nRAW RISK RESPONSE:\n%s", res_text)
-        parsed = parse_json_safe(res_text, [])
-        if isinstance(parsed, list):
+        parsed = parse_json_safe(res_text, {})
+        if isinstance(parsed, dict) and "error" in parsed:
+            raise ValueError(f"JSON Parsing Failed in Risk: {parsed['reason']}\nRaw Output:\n{parsed['raw_response']}")
+
+        risk_list = parsed.get("risks", []) if isinstance(parsed, dict) else []
+        if isinstance(risk_list, list):
             risk_matrix = [
                 {
                     "risk_level": item.get("risk_level", "Low"),
@@ -520,7 +534,7 @@ Clauses:
                     "impact": item.get("impact", ""),
                     "mitigation": item.get("mitigation", ""),
                 }
-                for item in parsed
+                for item in parsed.get("risks", [])
                 if isinstance(item, dict)
             ]
     except Exception as e:
@@ -540,65 +554,39 @@ Clauses:
 
 
 def evaluate_compliance(clauses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    clause_types = {clause.get("clause_type", "").strip().lower(): clause for clause in clauses}
-    confidentiality = clause_types.get("confidentiality")
     report: List[Dict[str, Any]] = []
-
-    def add(framework: str, status: str, gap_analysis: str):
-        report.append(
-            {
-                "framework": framework,
-                "clause_type": "Confidentiality",
-                "status": status,
-                "gap_analysis": gap_analysis,
-            }
-        )
-
-    if not confidentiality:
-        add("GDPR", "Non-Compliant", "No confidentiality clause was found.")
-        add("HIPAA", "Non-Compliant", "No confidentiality requirements for health data are addressed.")
-        add("SOC2", "Non-Compliant", "No confidentiality or security controls are present in the relevant clause.")
+    if not clauses:
         return report
 
-    text = confidentiality.get("original_text", "")
-    if re.search(r"third[- ]party|share.*with|disclos.*to.*third|without consent", text, re.I):
-        add(
-            "GDPR",
-            "Non-Compliant",
-            "Clause permits third-party disclosure without sufficient safeguards.",
-        )
-    else:
-        add(
-            "GDPR",
-            "Compliant",
-            "Confidentiality provisions are defined and aligned with personal data protection expectations.",
-        )
+    try:
+        from app.services.llm_service import LLMService
+        from app.agents.agent_utils import safe_parse_json
 
-    if re.search(r"protected health information|phi|health information|medical information", text, re.I):
-        add(
-            "HIPAA",
-            "Compliant",
-            "Clause explicitly references protection of health or medical information.",
-        )
-    else:
-        add(
-            "HIPAA",
-            "Non-Compliant",
-            "No explicit protections for health-related or PHI data are documented.",
-        )
+        prompt = """
+You are a Compliance Analyst. Review the following contract clauses and determine if GDPR, HIPAA, or SOC2 are applicable based on the contract language.
+For each regulation, return:
+- framework: "GDPR", "HIPAA", or "SOC2"
+- status: "APPLICABLE", "NOT APPLICABLE", "MENTIONED", "NOT FOUND", or "INSUFFICIENT INFORMATION"
+- gap_analysis: Explanation based strictly on provided text.
 
-    if re.search(r"confidential information|security controls|access controls|data protection|encryption", text, re.I):
-        add(
-            "SOC2",
-            "Compliant",
-            "Confidentiality language addresses security controls and data protection.",
-        )
-    else:
-        add(
-            "SOC2",
-            "Non-Compliant",
-            "Control and confidentiality requirements are not sufficiently defined.",
-        )
+Clauses:
+{clauses}
+
+Output JSON as a list of dicts.
+"""
+        res_text, _ = LLMService.invoke(prompt, {"clauses": json.dumps(clauses, indent=2)}, require_json=True)
+        parsed = safe_parse_json(res_text, [])
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, dict):
+                    report.append({
+                        "framework": item.get("framework", "Unknown"),
+                        "clause_type": "Compliance",
+                        "status": item.get("status", "NOT FOUND"),
+                        "gap_analysis": item.get("gap_analysis", "No information found.")
+                    })
+    except Exception as e:
+        pass
 
     return report
 
@@ -612,22 +600,36 @@ def compliance_node(state: AgentState) -> Dict[str, Any]:
     query = (state.get("query") or "").lower()
     next_agent = "end" if "compliance_only" in query else "negotiation"
 
-    prompt = f"""
+    prompt = """
 You are a Compliance Agent. Cross-reference the following clauses with compliance requirements (e.g. GDPR, HIPAA, SOC2).
-Format your response strictly as a JSON list containing: "framework", "clause_type", "status" (Compliant/Non-Compliant), "gap_analysis".
+Format your response strictly as a JSON object containing a "compliance" array:
+{{
+  "compliance": [
+    {{
+      "framework": "...",
+      "clause_type": "...",
+      "status": "Compliant|Non-Compliant",
+      "gap_analysis": "..."
+    }}
+  ]
+}}
 Do not add markdown formatting or anything outside the JSON block.
 
 Clauses:
-{json.dumps(clauses, indent=2)}
+{clauses}
 """
 
     compliance_report: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {}, require_json=True)
+        res_text, _ = LLMService.invoke(prompt, {"clauses": json.dumps(clauses, indent=2)}, require_json=True)
         logger.debug("\nRAW COMPLIANCE RESPONSE:\n%s", res_text)
-        parsed = parse_json_safe(res_text, [])
-        if isinstance(parsed, list):
+        parsed = parse_json_safe(res_text, {})
+        if isinstance(parsed, dict) and "error" in parsed:
+            raise ValueError(f"JSON Parsing Failed in Compliance: {parsed['reason']}\nRaw Output:\n{parsed['raw_response']}")
+
+        compliance_list = parsed.get("compliance", []) if isinstance(parsed, dict) else []
+        if isinstance(compliance_list, list):
             compliance_report = [
                 {
                     "framework": item.get("framework", "Unknown"),
@@ -635,7 +637,7 @@ Clauses:
                     "status": item.get("status", "Non-Compliant"),
                     "gap_analysis": item.get("gap_analysis", ""),
                 }
-                for item in parsed
+                for item in compliance_list
                 if isinstance(item, dict)
             ]
     except Exception as e:
@@ -725,36 +727,56 @@ def negotiation_node(state: AgentState) -> Dict[str, Any]:
         risk_matrix = risk_result.get("risk_matrix", [])
 
     next_agent = "end"
-    prompt = f"""
+    prompt = """
 You are a Negotiation Agent. Review these risks and the compliance report, then provide concrete counter-party draft redline sentences to mitigate them.
-Format your response strictly as a JSON list of objects containing: "clause_type", "proposed_text", "negotiation_tactic".
+Format your response strictly as a JSON object containing a "negotiations" array:
+{{
+  "negotiations": [
+    {{
+      "clause_type": "...",
+      "proposed_text": "...",
+      "negotiation_tactic": "..."
+    }}
+  ]
+}}
 Do not add markdown formatting or anything outside the JSON block.
 
 Risk Matrix:
-{json.dumps(risk_matrix, indent=2)}
+{risk_matrix}
 
 Compliance Report:
-{json.dumps(compliance_report, indent=2)}
+{compliance_report}
 """
 
     negotiation_suggestions: List[Dict[str, Any]] = []
     try:
         from app.services.llm_service import LLMService
-        res_text, _ = LLMService.invoke(prompt, {})
+        res_text, _ = LLMService.invoke(
+            prompt,
+            {
+                "risk_matrix": json.dumps(risk_matrix, indent=2),
+                "compliance_report": json.dumps(compliance_report, indent=2)
+            },
+            require_json=True
+        )
         logger.debug("\nRAW NEGOTIATION RESPONSE:\n%s", res_text)
-        parsed = parse_json_safe(res_text, [])
-        if isinstance(parsed, list):
-            negotiation_suggestions = [
-                {
-                    "clause_type": item.get("clause_type", "General"),
-                    "proposed_text": item.get("proposed_text", ""),
-                    "negotiation_tactic": item.get("negotiation_tactic", ""),
-                }
-                for item in parsed
-                if isinstance(item, dict)
-            ]
+        parsed = parse_json_safe(res_text, {})
+        if isinstance(parsed, dict) and "error" in parsed:
+            raise ValueError(f"JSON Parsing Failed in Negotiation: {parsed['reason']}\nRaw Output:\n{parsed['raw_response']}")
+
+        negotiation_list = parsed.get("negotiations", []) if isinstance(parsed, dict) else []
+        if isinstance(negotiation_list, list):
+            for item in negotiation_list:
+                if isinstance(item, dict):
+                    negotiation_suggestions.append(
+                        {
+                            "clause_type": item.get("clause_type", "Unknown"),
+                            "proposed_text": item.get("proposed_text", ""),
+                            "negotiation_tactic": item.get("negotiation_tactic", ""),
+                        }
+                    )
     except Exception as e:
-        logger.error("NEGOTIATION ERROR: %s", str(e))
+        logger.exception("NEGOTIATION ANALYSIS ERROR: %s", str(e))
 
     if not negotiation_suggestions:
         negotiation_suggestions = build_negotiation_suggestions(risk_matrix, compliance_report)

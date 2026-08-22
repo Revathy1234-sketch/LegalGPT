@@ -39,7 +39,7 @@ export default function Settings() {
             <div className="p-5 sm:p-6 space-y-6">
               <div className="flex items-center gap-5">
                 <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-sm border-2 border-white ring-2 ring-slate-100">
-                  JD
+                  U
                 </div>
                 <div>
                   <button className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500">
@@ -51,15 +51,15 @@ export default function Settings() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">First Name</label>
-                  <input type="text" defaultValue="John" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
+                  <input type="text" placeholder="First Name" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Last Name</label>
-                  <input type="text" defaultValue="Doe" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
+                  <input type="text" placeholder="Last Name" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
-                  <input type="email" defaultValue="john.doe@example.com" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
+                  <input type="email" placeholder="email@example.com" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
                 </div>
               </div>
             </div>

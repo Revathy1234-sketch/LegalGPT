@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+uploads/
+faiss_index/
+test.db
+alembic/versions/*
+!alembic/versions/.keep

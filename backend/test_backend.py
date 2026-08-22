@@ -12,8 +12,8 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 
-def print_status(label: str, ok: bool, detail: str = "") -> None:
-    marker = "✓" if ok else "✗"
+def print_status(label: str, status: bool, detail: str = ""):
+    marker = "[PASS]" if status else "[FAIL]"
     if detail:
         print(f"{marker} {label}: {detail}")
     else:
@@ -60,20 +60,14 @@ class TestCollector:
             if component == "LangChain" and any(name == "LangChain" for name, _, _ in self.results):
                 ok = any(name == "LangChain" and status for name, status, _ in self.results)
             if component == "FAISS" and any(name == "FAISS" for name, _, _ in self.results):
-                ok = any(name == "FAISS" and status for name, status, _ in self.results)
-            if component == "Embeddings" and any(name == "Embeddings" for name, _, _ in self.results):
-                ok = any(name == "Embeddings" and status for name, status, _ in self.results)
-            if component == "Routes" and any(name == "Routes" for name, _, _ in self.results):
-                ok = any(name == "Routes" and status for name, status, _ in self.results)
-            if component == "Uploads" and any(name == "Uploads" for name, _, _ in self.results):
-                ok = any(name == "Uploads" and status for name, status, _ in self.results)
-
-            marker = "✓ PASS" if ok else "✗ FAIL"
+        for name, status, msg in self.results:
+            display = name[:15]
+            marker = "[PASS]" if status else "[FAIL]"
             print(f"{display:<16} {marker}")
 
         print("\nOverall Status:")
         if self.failures:
-            print("✗ Backend Not Ready")
+            print("[FAIL] Backend Not Ready")
             print("\nFAILED:")
             for component, reason in self.failures:
                 print(f"{component}")

@@ -7,7 +7,7 @@ Ensures consistent structure, validation, and metadata tracking.
 
 from typing import Any, Dict, List, Optional, Generic, TypeVar
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
 
 
@@ -114,11 +114,8 @@ class EnterpriseErrorResponse(BaseModel):
     error: ErrorDetail = Field(...)
     request_id: Optional[str] = Field(None, description="Unique request identifier")
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            Enum: lambda v: v.value
-        }
+    # Pydantic V2: use_enum_values serializes enums as their string values.
+    model_config = ConfigDict(use_enum_values=True)
 
 
 # ============================================================================
@@ -229,7 +226,7 @@ ResultType = TypeVar('ResultType', bound=BaseModel)
 class EnterpriseResponse(BaseModel, Generic[ResultType]):
     """
     Standard enterprise response wrapper for all agents.
-    
+
     Wraps all agent outputs in a consistent structure with metadata,
     citations, confidence scores, and processing metrics.
     """
@@ -242,7 +239,7 @@ class EnterpriseResponse(BaseModel, Generic[ResultType]):
     )
     confidence_level: ConfidenceLevel = Field(..., description="Confidence classification")
     processing_time_ms: int = Field(..., ge=0, description="Total processing time")
-    
+
     # Retrieval & citation tracking
     retrieval_metadata: RetrievalMetadata = Field(...)
     citations: List[Citation] = Field(default_factory=list)
@@ -252,7 +249,7 @@ class EnterpriseResponse(BaseModel, Generic[ResultType]):
     source_chunk_ids: List[str] = Field(
         default_factory=list, description="Unique chunk IDs"
     )
-    
+
     # Analysis metadata
     confidence_breakdown: ConfidenceMetadata = Field(...)
     processing_metrics: ProcessingMetrics = Field(...)
@@ -262,30 +259,16 @@ class EnterpriseResponse(BaseModel, Generic[ResultType]):
     warnings: List[str] = Field(
         default_factory=list, description="Non-fatal warnings"
     )
-    
+
     # Agent-specific result (polymorphic)
     result: Dict[str, Any] = Field(...)
-    
+
     # Tracking & correlation
     request_id: Optional[str] = Field(None, description="Unique request ID for tracing")
     contract_id: Optional[str] = Field(None, description="Source contract ID")
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            Enum: lambda v: v.value
-        }
-        use_enum_values = True
-
-    def dict(self, **kwargs):
-        """Override dict to ensure proper enum serialization."""
-        d = super().dict(**kwargs)
-        d['confidence_level'] = self.confidence_level.value
-        if hasattr(self.confidence_breakdown, 'confidence_level'):
-            d['confidence_breakdown']['confidence_level'] = (
-                self.confidence_breakdown.confidence_level.value
-            )
-        return d
+    # Pydantic V2: use_enum_values serializes enums as their string values.
+    model_config = ConfigDict(use_enum_values=True)
 
 
 # ============================================================================

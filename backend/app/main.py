@@ -21,10 +21,19 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"error": "An internal server error occurred."}
     )
 
+from app.core.config import settings
+
+# Parse allowed origins from settings
+allowed_origins_raw = getattr(settings, "ALLOWED_ORIGINS", "")
+if not allowed_origins_raw:
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [origin.strip() for origin in allowed_origins_raw.split(",") if origin.strip()]
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,3 +45,7 @@ app.include_router(api_v1_router, prefix="/api/v1")
 @app.get("/")
 def read_root():
     return {"status": "online", "application": "LegalGPT Enterprise API"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}

@@ -70,6 +70,8 @@ def _agent_payload(response: Any) -> Dict[str, Any]:
 
 
 def _serialized_response(response: Any) -> Dict[str, Any]:
+    if isinstance(response, dict):
+        return response
     if hasattr(response, 'model_dump'):
         return response.model_dump(mode='json')
     return {'result': _agent_payload(response)}
@@ -85,17 +87,18 @@ def _log_execution(
     end_time: float,
 ) -> None:
     try:
-        log_agent_execution(
-            db=db,
-            agent_name=agent_name,
-            contract_id=contract_id,
-            task_type=task_type,
-            input_payload={'contract_id': contract_id},
-            output_payload=_serialized_response(response),
-            status='SUCCESS',
-            start_time=start_time,
-            end_time=end_time,
-        )
+        with db.begin_nested():
+            log_agent_execution(
+                db=db,
+                agent_name=agent_name,
+                contract_id=contract_id,
+                task_type=task_type,
+                input_payload={'contract_id': contract_id},
+                output_payload=_serialized_response(response),
+                status='SUCCESS',
+                start_time=start_time,
+                end_time=end_time,
+            )
     except Exception as exc:
         logger.warning('Failed to persist %s execution log: %s', agent_name, exc)
 
@@ -119,7 +122,15 @@ def run_summarize(
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_summarize', str(contract_id))
 
+    # Return cached summary but still record telemetry for every API call.
     if contract.summary and contract.summary != "No summary generated.":
+        start_time = time.perf_counter()
+        end_time = time.perf_counter()
+        _log_execution(
+            db, 'SummaryAgent', str(contract_id), 'summarize',
+            {'success': True, 'result': {'summary': contract.summary, 'cached': True}},
+            start_time, end_time,
+        )
         return contract
 
     start_time = time.perf_counter()
@@ -431,4 +442,21 @@ def knowledge_graph(
         raise HTTPException(status_code=404, detail='Contract not found')
 
     validate_contract_access(contract, current_user)
-    return run_knowledge_graph_agent(str(contract_id))
+
+    start_time = time.perf_counter()
+    agent_response = run_knowledge_graph_agent(str(contract_id))
+    end_time = time.perf_counter()
+    result_dict = _agent_payload(agent_response)
+
+    _log_execution(
+        db, 'KnowledgeGraphAgent', str(contract_id), 'knowledge_graph',
+        agent_response, start_time, end_time,
+    )
+
+    return {
+        "success": True,
+        "result": {
+            "entities": result_dict.get("nodes", []),
+            "relationships": result_dict.get("edges", [])
+        }
+    }

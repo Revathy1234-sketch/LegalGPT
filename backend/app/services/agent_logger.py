@@ -27,6 +27,5 @@ def log_agent_execution(
         latency_ms=latency_ms,
     )
     db.add(log)
-    db.commit()
-    db.refresh(log)
+    db.flush()  # flush within the savepoint so the ID is populated
     return log
