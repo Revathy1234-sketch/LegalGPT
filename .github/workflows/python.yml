@@ -26,4 +26,8 @@ jobs:
       - name: Compile application
         run: python -m compileall -q app
       - name: Run smoke tests
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost/dummy"
+          SECRET_KEY: "dummy_secret_key"
+          JWT_SECRET: "dummy_jwt_secret"
         run: python -m pytest tests/test_smoke.py -q -p no:cacheprovider
