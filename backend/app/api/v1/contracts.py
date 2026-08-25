@@ -152,6 +152,14 @@ DOCUMENT:
         db.commit()
         db.refresh(db_contract)
 
+        # Cleanup local PDF file to save space
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"Cleaned up local PDF file: {file_path}")
+        except Exception as cleanup_err:
+            logger.warning(f"Failed to cleanup PDF file {file_path}: {cleanup_err}")
+
     except Exception as e:
         try:
             db.rollback()  # Reset any poisoned transaction state before attempting the error commit
@@ -247,6 +255,8 @@ def load_contract_text_from_storage(contract: Contract) -> str:
             return DocumentParser.extract_text_from_pdf(contract.storage_url)
         except Exception as e:
             logger.warning("Unable to load contract text from storage: %s", e)
+    
+    # If the file was deleted (stateless), return empty string or error
     return ""
 
 

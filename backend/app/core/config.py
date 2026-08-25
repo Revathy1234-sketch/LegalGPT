@@ -60,11 +60,6 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024
 
     # =========================
-    # FAISS
-    # =========================
-    FAISS_INDEX_PATH: str = "./faiss_index"
-
-    # =========================
     # Embeddings
     # =========================
     EMBEDDING_MODEL: str = (

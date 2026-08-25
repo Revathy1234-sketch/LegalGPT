@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.core.enums import UserRole
@@ -136,7 +137,7 @@ class ContractEmbedding(Base):
     parent_id = Column(String(100), nullable=False)
     child_text = Column(Text, nullable=False)
     parent_text = Column(Text, nullable=False)
-    embedding = Column(JSONB, nullable=True)
+    embedding = Column(Vector(384), nullable=True)
     relevance_source = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

@@ -59,7 +59,6 @@ class TestCollector:
                 ok = any(name == "AI Agents" and status for name, status, _ in self.results)
             if component == "LangChain" and any(name == "LangChain" for name, _, _ in self.results):
                 ok = any(name == "LangChain" and status for name, status, _ in self.results)
-            if component == "FAISS" and any(name == "FAISS" for name, _, _ in self.results):
         for name, status, msg in self.results:
             display = name[:15]
             marker = "[PASS]" if status else "[FAIL]"

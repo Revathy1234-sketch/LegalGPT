@@ -6,25 +6,17 @@ import logging
 from typing import List, Dict, Any, Optional
 
 try:
-    import faiss
-except Exception:
-    faiss = None
-
-try:
     import numpy as np
 except Exception:
     np = None
 
 SentenceTransformer = None
-SENTENCE_TRANSFORMERS_IMPORT_ERROR = "sentence-transformers import skipped for startup safety"
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-
 class SimpleBM25:
-
     def __init__(self, documents: List[str]):
         self.documents = [self._tokenize(doc) for doc in documents]
         self.N = len(self.documents)
@@ -59,26 +51,14 @@ class SimpleBM25:
                 scores[i] += idf * ((freq * (self.k1 + 1)) / denominator)
         return scores
 
-
 class VectorService:
-
     def __init__(self):
-        os.makedirs(settings.FAISS_INDEX_PATH, exist_ok=True)
         self.model: Optional[Any] = None
         self.model_error: Optional[str] = None
-        self.index_cache: Dict[str, Any] = {}
         self.chunk_cache: Dict[str, List[Dict[str, Any]]] = {}
-
-    def _import_dependencies(self) -> bool:
-        if faiss is None or np is None:
-            self.model_error = "FAISS or NumPy is not available."
-            return False
-        return True
 
     def _ensure_model(self) -> bool:
         global SentenceTransformer
-        if not self._import_dependencies():
-            return False
         if self.model is not None:
             return True
         if SentenceTransformer is None:
@@ -86,10 +66,7 @@ class VectorService:
                 from sentence_transformers import SentenceTransformer as _SentenceTransformer
                 SentenceTransformer = _SentenceTransformer
             except Exception as exc:
-                self.model_error = (
-                    "Sentence transformers is unavailable. "
-                    f"Original error: {exc}"
-                )
+                self.model_error = f"Sentence transformers is unavailable. Error: {exc}"
                 logger.error("Failed to lazily import SentenceTransformer: %s", exc)
                 return False
 
@@ -107,19 +84,11 @@ class VectorService:
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         if not scores:
             return []
-
-        # If max score is 0 or less, they're all 0 bounds
         max_score = max(scores)
         if max_score <= 0:
             return [0.0 for _ in scores]
-
-        # BM25 scores can be arbitrarily high, but we shouldn't normalize semantic scores
-        # that are already cosine similarity. To be safe, if max > 1.0 (BM25), we normalize to 1.0.
-        # If max <= 1.0 (Cosine Similarity), we leave them as absolute scores!
         if max_score > 1.0:
             return [float(score) / float(max_score) for score in scores]
-
-        # For Cosine Similarity, just return the raw scores (bounded -1 to 1, we cap at 0 minimum)
         return [max(float(score), 0.0) for score in scores]
 
     def _get_embedding(self, text: str) -> List[float]:
@@ -139,15 +108,9 @@ class VectorService:
         )
         return embeddings.tolist()
 
-    def _bm25_results(
-        self,
-        query: str,
-        chunks: List[Dict[str, Any]],
-        top_k: int
-    ) -> List[Dict[str, Any]]:
+    def _bm25_results(self, query: str, chunks: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
         if not chunks:
             return []
-
         texts = [f"{chunk['child_text']} {chunk['parent_text']}" for chunk in chunks]
         ranker = SimpleBM25(texts)
         raw_scores = ranker.score(query)
@@ -163,126 +126,35 @@ class VectorService:
                 "score": score,
                 "relevance_source": "bm25"
             })
-
         results.sort(key=lambda item: item["score"], reverse=True)
         return results[:top_k]
 
-    def _semantic_results(
-        self,
-        contract_id: str,
-        query: str,
-        top_k: int
-    ) -> List[Dict[str, Any]]:
-        chunks = self._load_chunks(contract_id)
-        if not chunks:
-            return []
-
-        index = self._load_faiss_index(contract_id)
-        if index is None:
-            return []
-
-        try:
-            query_embedding = self._get_embedding(query)
-        except RuntimeError:
-            return []
-
-        query_vector = np.array([query_embedding], dtype=np.float32)
-        faiss.normalize_L2(query_vector)
-
-        k = min(top_k, len(chunks))
-        scores, indices = index.search(query_vector, k)
-
-        raw_scores = [float(score) for score in scores[0]]
-        normalized_scores = self._normalize_scores(raw_scores)
-
-        results = []
-        for score, idx in zip(normalized_scores, indices[0]):
-            if idx < 0 or idx >= len(chunks):
-                continue
-            chunk = chunks[idx]
-            results.append({
-                "child_id": chunk["child_id"],
-                "parent_id": chunk["parent_id"],
-                "child_text": chunk["child_text"],
-                "parent_text": chunk["parent_text"],
-                "score": score,
-                "relevance_source": "semantic"
-            })
-
-        return results
-
-    def _merge_and_rerank(
-        self,
-        semantic_hits: List[Dict[str, Any]],
-        bm25_hits: List[Dict[str, Any]],
-        chunk_limit: int
-    ) -> List[Dict[str, Any]]:
-        merged: Dict[str, Dict[str, Any]] = {}
-        for hit in semantic_hits + bm25_hits:
-            key = f"{hit['parent_id']}::{hit['child_id']}"
-            existing = merged.get(key)
-            if existing is None or hit["score"] > existing["score"]:
-                merged[key] = hit
-
-        candidates = sorted(
-            merged.values(),
-            key=lambda item: item["score"],
-            reverse=True
-        )
-
-        selected = []
-        seen_parents = set()
-        for candidate in candidates:
-            if candidate["parent_id"] in seen_parents:
-                continue
-            seen_parents.add(candidate["parent_id"])
-            selected.append(candidate)
-            if len(selected) >= chunk_limit:
-                break
-
-        return selected
-
-    def _index_file_path(self, contract_id: str) -> str:
-        return os.path.join(settings.FAISS_INDEX_PATH, f"{contract_id}.index")
-
-    def _metadata_file_path(self, contract_id: str) -> str:
-        return os.path.join(settings.FAISS_INDEX_PATH, f"{contract_id}_metadata.json")
-
-    def _load_chunks(self, contract_id: str) -> List[Dict[str, Any]]:
+    def _load_chunks(self, contract_id: str, db=None) -> List[Dict[str, Any]]:
         if contract_id in self.chunk_cache:
             return self.chunk_cache[contract_id]
-
-        metadata_file = self._metadata_file_path(contract_id)
-        if not os.path.exists(metadata_file):
-            return []
-
-        with open(metadata_file, "r", encoding="utf-8") as f:
-            chunks = json.load(f)
-
+        
+        if not db:
+            from app.core.database import get_db
+            db_generator = get_db()
+            db = next(db_generator)
+            
+        from app.models.models import ContractEmbedding
+        db_embeddings = db.query(ContractEmbedding).filter(ContractEmbedding.contract_id == contract_id).all()
+        chunks = []
+        for emb in db_embeddings:
+            chunks.append({
+                "child_id": emb.chunk_id,
+                "parent_id": emb.parent_id,
+                "child_text": emb.child_text,
+                "parent_text": emb.parent_text
+            })
+            
         self.chunk_cache[contract_id] = chunks
         return chunks
 
-    def _load_faiss_index(self, contract_id: str):
-        if contract_id in self.index_cache:
-            return self.index_cache[contract_id]
-
-        index_file = self._index_file_path(contract_id)
-        if not os.path.exists(index_file):
-            return None
-
-        index = faiss.read_index(index_file)
-        self.index_cache[contract_id] = index
-        return index
-
-    def index_contract_chunks(
-        self,
-        contract_id: str,
-        chunks: List[Dict[str, Any]],
-        db=None
-    ) -> None:
+    def index_contract_chunks(self, contract_id: str, chunks: List[Dict[str, Any]], db=None) -> None:
         if not chunks:
             raise ValueError("No chunks available for indexing.")
-
         if not self._ensure_model():
             raise RuntimeError(self.model_error or "Embedding model is unavailable.")
 
@@ -292,21 +164,6 @@ class VectorService:
             batch = child_texts[start:start + settings.EMBEDDING_BATCH_SIZE]
             embeddings.extend(self._get_embeddings_batch(batch))
 
-        vectors = np.array(embeddings, dtype=np.float32)
-        faiss.normalize_L2(vectors)
-
-        dimension = vectors.shape[1]
-        index = faiss.IndexFlatIP(dimension)
-        index.add(vectors)
-        logger.debug("Writing FAISS index for contract_id=%s", contract_id)
-        logger.debug("Writing chunk metadata for contract_id=%s", contract_id)
-
-        faiss.write_index(index, self._index_file_path(contract_id))
-
-        with open(self._metadata_file_path(contract_id), "w", encoding="utf-8") as f:
-            json.dump(chunks, f, ensure_ascii=False, indent=2)
-
-        self.index_cache.pop(contract_id, None)
         self.chunk_cache[contract_id] = chunks
 
         if db is not None:
@@ -323,40 +180,77 @@ class VectorService:
                     relevance_source="semantic"
                 )
                 db.add(db_embedding)
-            db.flush()  # Flush within the caller's transaction; don't commit here
+            db.flush()
 
-        logger.info("Indexed %s chunks for contract_id=%s", len(chunks), contract_id)
+        logger.info("Indexed %s chunks for contract_id=%s using pgvector", len(chunks), contract_id)
 
-    def search_contract(
-        self,
-        contract_id: str,
-        query: str,
-        top_k: int = settings.MAX_CHUNK_RESULTS
-    ) -> List[Dict[str, Any]]:
+    def _semantic_results(self, contract_id: str, query: str, top_k: int, db=None) -> List[Dict[str, Any]]:
+        if not db:
+            from app.core.database import get_db
+            db_generator = get_db()
+            db = next(db_generator)
+
+        try:
+            query_embedding = self._get_embedding(query)
+        except RuntimeError:
+            return []
+
+        from app.models.models import ContractEmbedding
+        # Inner product via pgvector cosine distance: embedding.cosine_distance(query_embedding)
+        results = (
+            db.query(ContractEmbedding, ContractEmbedding.embedding.cosine_distance(query_embedding).label("distance"))
+            .filter(ContractEmbedding.contract_id == contract_id)
+            .order_by("distance")
+            .limit(top_k)
+            .all()
+        )
+
+        formatted_results = []
+        for res, distance in results:
+            formatted_results.append({
+                "child_id": res.chunk_id,
+                "parent_id": res.parent_id,
+                "child_text": res.child_text,
+                "parent_text": res.parent_text,
+                "score": 1.0 - float(distance or 0.0), # Normalize cosine distance to a similarity score
+                "relevance_source": "semantic"
+            })
+            
+        return formatted_results
+
+    def search_contract(self, contract_id: str, query: str, top_k: int = settings.MAX_CHUNK_RESULTS) -> List[Dict[str, Any]]:
         logger.debug("Searching contract_id=%s; query_length=%s", contract_id, len(query))
 
-        chunks = self._load_chunks(contract_id)
+        from app.core.database import get_db
+        db_generator = get_db()
+        db = next(db_generator)
+
+        chunks = self._load_chunks(contract_id, db=db)
         if not chunks:
             return []
 
-        semantic_hits = self._semantic_results(
-            contract_id,
-            query,
-            settings.SEMANTIC_TOP_K
-        )
-        bm25_hits = self._bm25_results(
-            query,
-            chunks,
-            settings.BM25_TOP_K
-        )
+        semantic_hits = self._semantic_results(contract_id, query, settings.SEMANTIC_TOP_K, db=db)
+        bm25_hits = self._bm25_results(query, chunks, settings.BM25_TOP_K)
 
-        merged_results = self._merge_and_rerank(
-            semantic_hits,
-            bm25_hits,
-            chunk_limit=top_k
-        )
+        merged = {}
+        for hit in semantic_hits + bm25_hits:
+            key = f"{hit['parent_id']}::{hit['child_id']}"
+            existing = merged.get(key)
+            if existing is None or hit["score"] > existing["score"]:
+                merged[key] = hit
 
-        return merged_results
+        candidates = sorted(merged.values(), key=lambda item: item["score"], reverse=True)
 
+        selected = []
+        seen_parents = set()
+        for candidate in candidates:
+            if candidate["parent_id"] in seen_parents:
+                continue
+            seen_parents.add(candidate["parent_id"])
+            selected.append(candidate)
+            if len(selected) >= top_k:
+                break
+
+        return selected
 
 vector_service = VectorService()
