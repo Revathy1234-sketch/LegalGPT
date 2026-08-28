@@ -300,3 +300,37 @@ def get_authorized_contract(
         )
 
     return contract
+
+
+@router.delete("/{contract_id}")
+def delete_contract(
+    contract_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    contract = get_authorized_contract(contract_id, current_user, db)
+    
+    try:
+        if contract.storage_url and os.path.exists(contract.storage_url):
+            try:
+                os.remove(contract.storage_url)
+                logger.info(f"Cleaned up local PDF file: {contract.storage_url}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup PDF file {contract.storage_url}: {e}")
+                
+        contract_id_str = str(contract_id)
+        if contract_id_str in vector_service.chunk_cache:
+            del vector_service.chunk_cache[contract_id_str]
+            logger.info(f"Removed contract {contract_id_str} from chunk cache")
+            
+        db.delete(contract)
+        db.commit()
+        
+        return {"message": "Contract deleted successfully", "contract_id": contract_id_str}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to delete contract {contract_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while deleting the contract: {str(e)}"
+        )

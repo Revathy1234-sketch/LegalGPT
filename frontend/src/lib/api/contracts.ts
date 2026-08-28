@@ -37,4 +37,9 @@ export const contractsApi = {
     });
     return response.data;
   },
+
+  deleteContract: async (id: string): Promise<{ message: string; contract_id: string }> => {
+    const response = await apiClient.delete<{ message: string; contract_id: string }>(`/api/v1/contracts/${id}`);
+    return response.data;
+  },
 };

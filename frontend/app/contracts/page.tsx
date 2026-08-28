@@ -1,16 +1,32 @@
 "use client";
 
+import { useState } from "react";
 import { AppShell } from "@/src/components/layout/app-shell";
-import { Search, Filter, Plus, FileText, MoreHorizontal, Loader2 } from "lucide-react";
+import { Search, Filter, Plus, FileText, MoreHorizontal, Loader2, Trash2, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { contractsApi } from "@/src/lib/api/contracts";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { contractsApi, ContractResponse } from "@/src/lib/api/contracts";
 import { format } from "date-fns";
 
 export default function ContractsLibrary() {
+  const queryClient = useQueryClient();
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [deleteConfirmContract, setDeleteConfirmContract] = useState<ContractResponse | null>(null);
+
   const { data: contracts, isLoading, isError } = useQuery({
     queryKey: ['contracts'],
     queryFn: contractsApi.getAll,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: contractsApi.deleteContract,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      setDeleteConfirmContract(null);
+    },
+    onError: (error) => {
+      alert("Failed to delete contract. Please try again.");
+    }
   });
 
   if (isError) {
@@ -132,10 +148,41 @@ export default function ContractsLibrary() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-slate-600">-</td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors outline-none focus:ring-2 focus:ring-slate-200">
+                    <td className="px-6 py-4 text-right relative">
+                      <button 
+                        onClick={() => setMenuOpenId(menuOpenId === contract.id ? null : contract.id)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors outline-none focus:ring-2 focus:ring-slate-200"
+                      >
                         <MoreHorizontal className="h-5 w-5" />
                       </button>
+                      
+                      {menuOpenId === contract.id && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-10" 
+                            onClick={() => setMenuOpenId(null)}
+                          />
+                          <div className="absolute right-6 top-10 w-40 bg-white rounded-md shadow-lg border border-slate-200 z-20 py-1 overflow-hidden">
+                            <Link 
+                              href={`/contracts/${contract.id}`}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Open
+                            </Link>
+                            <button 
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                setDeleteConfirmContract(contract);
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 w-full text-left"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -153,6 +200,34 @@ export default function ContractsLibrary() {
           </div>
         </div>
       </div>
+
+      {deleteConfirmContract && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 relative">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Contract</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Are you sure you want to permanently delete the contract <span className="font-semibold text-slate-700">{deleteConfirmContract.file_name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end mt-6">
+              <button 
+                onClick={() => setDeleteConfirmContract(null)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-md hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => deleteMutation.mutate(deleteConfirmContract.id)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 bg-rose-600 border border-transparent text-white rounded-md hover:bg-rose-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
