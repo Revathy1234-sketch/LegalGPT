@@ -10,6 +10,19 @@ import { FileText, AlertTriangle, Clock, CheckCircle2, Loader2 } from "lucide-re
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "@/src/lib/api/dashboard";
 import Link from "next/link";
+import { EvidenceProvider } from "@/src/contexts/evidence-context";
+import { EvidencePanel } from "@/src/components/contracts/evidence-panel";
+import { useEvidence } from "@/src/contexts/evidence-context";
+
+function DashboardEvidenceWrapper() {
+  const { isOpen } = useEvidence();
+  if (!isOpen) return null;
+  return (
+    <div className="w-80 border-l border-slate-200 bg-white hidden xl:flex flex-col shrink-0 relative z-10 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
+      <EvidencePanel />
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { data, isLoading, isError } = useQuery({
@@ -18,14 +31,18 @@ export default function Dashboard() {
   });
 
   return (
-    <AppShell>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <EvidenceProvider>
+      <AppShell>
+        <div className="flex h-full w-full">
+          {/* Main Dashboard Content */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Welcome to LegalGPT</h1>
           <p className="text-slate-500 mt-1 sm:mt-1.5 font-medium">Explainable Multi-Agent Contract Intelligence</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link href="/contracts" className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-slate-200">
+          <Link href="/workspace" className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-slate-200">
             Open AI Workspace
           </Link>
           <Link href="/contracts/upload" className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
@@ -70,17 +87,19 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="xl:col-span-2">
-              <RecentContracts contracts={data.recent_contracts} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-6">
-              <RiskOverview data={data.risk_distribution} />
-              <RecentActivity activities={data.recent_activity} />
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <RiskOverview data={data} />
+            <RecentActivity activities={data.recent_activity} />
+          </div>
+          <div className="w-full">
+            <RecentContracts contracts={data.recent_contracts} />
           </div>
         </>
       ) : null}
-    </AppShell>
+      </div>
+      <DashboardEvidenceWrapper />
+    </div>
+      </AppShell>
+    </EvidenceProvider>
   );
 }

@@ -35,6 +35,7 @@ class User(Base):
         server_default=UserRole.READER.value,
     )
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    avatar_url = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     organization = relationship("Organization", back_populates="users")

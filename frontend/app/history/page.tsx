@@ -5,7 +5,7 @@ import { Search, Filter, MoreHorizontal, FileText, CheckCircle2, Bot, Scale, Shi
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { historyApi } from "@/src/lib/api/history";
-
+import { formatIST } from "@/src/lib/date-utils";
 export default function AnalysisHistory() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['history'],
@@ -97,7 +97,7 @@ export default function AnalysisHistory() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-500 font-medium">
-                      {new Date(item.created_at).toLocaleString()}
+                      {formatIST(item.created_at)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link href={`/contracts/${item.contract_id}`} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-200 transition-colors outline-none focus:ring-2 focus:ring-slate-300">

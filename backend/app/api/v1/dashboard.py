@@ -38,12 +38,34 @@ class RiskDistribution(BaseModel):
     name: str
     value: int
     color: str
+    findings: List[dict] = []
+
+class ContractTypeStats(BaseModel):
+    type: str
+    count: int
+
+class StatusDistribution(BaseModel):
+    name: str
+    value: int
+    color: str
+
+class RiskRadar(BaseModel):
+    category: str
+    score: int
+
+class AgentUsage(BaseModel):
+    name: str
+    count: int
 
 class DashboardData(BaseModel):
     stats: DashboardStats
     recent_activity: List[RecentActivity]
     recent_contracts: List[RecentContract]
     risk_distribution: List[RiskDistribution]
+    contract_types: List[ContractTypeStats] = []
+    status_distribution: List[StatusDistribution] = []
+    risk_radar: List[RiskRadar] = []
+    agent_usage: List[AgentUsage] = []
 
 def _time_ago(dt: datetime) -> str:
     if not dt:
@@ -98,29 +120,57 @@ def get_dashboard_stats(
     medium_risk = 0
     high_risk = 0
 
+    high_findings = []
+    medium_findings = []
+    low_findings = []
+
     if contract_ids:
         assessments = db.query(ContractRiskAssessment).filter(
             ContractRiskAssessment.contract_id.in_(contract_ids)
         ).all()
 
-        # We only want the latest risk assessment per contract, or we can just group by
-        latest_risk_map = {}
+        # Count findings from risk_matrix
         for a in assessments:
-            if a.contract_id not in latest_risk_map or a.evaluated_at > latest_risk_map[a.contract_id].evaluated_at:
-                latest_risk_map[a.contract_id] = a
+            if a.risk_matrix and isinstance(a.risk_matrix, list):
+                for finding in a.risk_matrix:
+                    # Depending on how it's stored, it might have a 'severity', 'level', or 'status'
+                    # Or we just use the overall score of the assessment if finding level isn't specified
+                    severity = finding.get('severity') or finding.get('status') or 'Medium'
+                    sev_lower = str(severity).lower()
+                    
+                    finding_data = {
+                        "category": finding.get("category", "General"),
+                        "description": finding.get("issue") or finding.get("description", "No description"),
+                        "impact": finding.get("financial_impact") or finding.get("impact", ""),
+                        "evidence": finding.get("clause_reference") or finding.get("evidence", ""),
+                        "page": finding.get("page", ""),
+                        "section": finding.get("section", ""),
+                        "source_text": finding.get("source_text", "")
+                    }
 
-        for a in latest_risk_map.values():
-            if a.overall_score < -1:
-                high_risk += 1
-            elif a.overall_score < 0:
-                medium_risk += 1
+                    if 'high' in sev_lower or 'critical' in sev_lower or 'non-compliant' in sev_lower:
+                        high_risk += 1
+                        high_findings.append(finding_data)
+                    elif 'low' in sev_lower or 'info' in sev_lower:
+                        low_risk += 1
+                        low_findings.append(finding_data)
+                    else:
+                        medium_risk += 1
+                        medium_findings.append(finding_data)
             else:
-                low_risk += 1
+                # Fallback to contract-level score if no matrix
+                score = a.overall_score if a.overall_score is not None else 0
+                if score < -1:
+                    high_risk += 1
+                elif score < 0:
+                    medium_risk += 1
+                else:
+                    low_risk += 1
 
     risk_distribution = [
-        {"name": "High Risk", "value": high_risk, "color": "#f43f5e"},
-        {"name": "Medium Risk", "value": medium_risk, "color": "#f59e0b"},
-        {"name": "Low Risk", "value": low_risk, "color": "#10b981"},
+        {"name": "High Risk", "value": high_risk, "color": "#f43f5e", "findings": high_findings},
+        {"name": "Medium Risk", "value": medium_risk, "color": "#f59e0b", "findings": medium_findings},
+        {"name": "Low Risk", "value": low_risk, "color": "#10b981", "findings": low_findings},
     ]
 
     # 6. Recent Contracts
@@ -182,6 +232,37 @@ def get_dashboard_stats(
         for a in activities[:10]
     ]
 
+    # --- Additional Data for 6+ Charts ---
+    # Status Distribution
+    status_distribution = [
+        {"name": "Completed", "value": total_contracts - pending_count, "color": "#10b981"},
+        {"name": "Pending", "value": pending_count, "color": "#f59e0b"}
+    ]
+    
+    # Contract Types
+    type_counts = {}
+    for c in contracts:
+        ctype = c.type or "PDF"
+        type_counts[ctype] = type_counts.get(ctype, 0) + 1
+    contract_types = [{"type": k, "count": v} for k, v in type_counts.items()]
+    
+    # Risk Radar
+    risk_radar = [
+        {"category": "Financial", "score": min(high_risk_count * 20, 100)},
+        {"category": "Operational", "score": min(medium_risk * 15, 100)},
+        {"category": "Legal", "score": min(high_risk * 25, 100)},
+        {"category": "Compliance", "score": min((high_risk + medium_risk) * 10, 100)},
+        {"category": "Reputation", "score": min(low_risk * 5, 100)},
+    ]
+    
+    # Agent Usage
+    agent_counts = {}
+    if contract_ids:
+        logs = db.query(AgentExecutionLog).filter(AgentExecutionLog.contract_id.in_(contract_ids)).all()
+        for log in logs:
+            agent_counts[log.task_type] = agent_counts.get(log.task_type, 0) + 1
+    agent_usage = [{"name": k, "count": v} for k, v in agent_counts.items()]
+
     return DashboardData(
         stats=DashboardStats(
             total_contracts=total_contracts,
@@ -191,5 +272,32 @@ def get_dashboard_stats(
         ),
         recent_activity=recent_activity,
         recent_contracts=recent_contracts,
-        risk_distribution=risk_distribution
+        risk_distribution=risk_distribution,
+        contract_types=contract_types,
+        status_distribution=status_distribution,
+        risk_radar=risk_radar,
+        agent_usage=agent_usage
     )
+
+@router.get("/agent-status")
+def get_agent_status(db: Session = Depends(get_db)):
+    # Simple check for now: count recent successful executions per agent
+    agents = [
+        {"name": "SummaryAgent", "label": "Summary", "task": "summarize"},
+        {"name": "ClauseAgent", "label": "Clauses", "task": "clause_extraction"},
+        {"name": "RiskAgent", "label": "Risk", "task": "risk_analysis"},
+        {"name": "ComplianceAgent", "label": "Compliance", "task": "compliance_check"},
+        {"name": "NegotiationAgent", "label": "Negotiation", "task": "negotiation_analysis"},
+        {"name": "KnowledgeGraphAgent", "label": "Knowledge Graph", "task": "knowledge_graph"}
+    ]
+    status = []
+    for a in agents:
+        count = db.query(AgentExecutionLog).filter(AgentExecutionLog.agent_name == a["name"]).count()
+        status.append({
+            "name": a["label"],
+            "status": "Active" if count > 0 else "Ready",
+            "executions": count
+        })
+    status.insert(0, {"name": "Retrieval", "status": "Active", "executions": -1})
+    status.append({"name": "Chat", "status": "Ready", "executions": 0})
+    return status

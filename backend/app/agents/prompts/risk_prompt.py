@@ -59,6 +59,9 @@ Return valid JSON ONLY:
       "financial_impact": "Potential malpractice claims without limit",
       "mitigation": "Add professional liability cap and require malpractice insurance",
       "clause_reference": "Section 4.2",
+      "page": "Page 3",
+      "section": "4.2 Liability",
+      "source_text": "The Firm shall be liable for all damages arising from...",
       "confidence_score": 0.88
     }}
   ],

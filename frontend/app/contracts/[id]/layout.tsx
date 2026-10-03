@@ -7,6 +7,7 @@ import { ContractNavigation } from "@/src/components/contracts/contract-navigati
 import { EvidencePanel } from "@/src/components/contracts/evidence-panel";
 import { useQuery } from "@tanstack/react-query";
 import { contractsApi } from "@/lib/api/contracts";
+import { EvidenceProvider } from "@/src/contexts/evidence-context";
 
 export default function ContractLayout({ children, params }: { children: ReactNode, params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -16,7 +17,8 @@ export default function ContractLayout({ children, params }: { children: ReactNo
     queryFn: () => contractsApi.getById(resolvedParams.id),
   });
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden selection:bg-blue-100 selection:text-blue-900">
+    <EvidenceProvider>
+      <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden selection:bg-blue-100 selection:text-blue-900">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar />
@@ -70,5 +72,6 @@ export default function ContractLayout({ children, params }: { children: ReactNo
         </div>
       </div>
     </div>
+    </EvidenceProvider>
   );
 }

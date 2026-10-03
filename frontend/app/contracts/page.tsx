@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contractsApi, ContractResponse } from "@/src/lib/api/contracts";
 import { format } from "date-fns";
+import { formatIST } from "@/src/lib/date-utils";
 
 export default function ContractsLibrary() {
   const queryClient = useQueryClient();
@@ -123,7 +124,7 @@ export default function ContractsLibrary() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">-</td>
                     <td className="px-6 py-4 text-slate-600">
-                      {contract.created_at ? format(new Date(contract.created_at), 'MMM d, yyyy') : '-'}
+                      {contract.created_at ? formatIST(contract.created_at) : '-'}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${

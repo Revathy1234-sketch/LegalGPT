@@ -1,6 +1,18 @@
-import { FileText, Database, Info, ExternalLink, X } from "lucide-react";
+import { FileText, Database, Info, ExternalLink, X, ShieldAlert } from "lucide-react";
+import { useEvidence } from "@/src/contexts/evidence-context";
 
 export function EvidencePanel() {
+  const { evidence, sourceType, isOpen, setIsOpen } = useEvidence();
+
+  if (!isOpen && evidence.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-slate-400 text-sm">
+        <Database className="h-10 w-10 text-slate-200 mb-3" />
+        <p className="text-center">Select an item to view its supporting evidence.</p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
@@ -8,7 +20,10 @@ export function EvidencePanel() {
           <Database className="h-4 w-4 text-slate-500" />
           <h2 className="text-sm font-semibold text-slate-900">Evidence Panel</h2>
         </div>
-        <button className="text-slate-400 hover:text-slate-600 rounded-md p-1 hover:bg-slate-200/50 transition-colors">
+        <button 
+          onClick={() => setIsOpen(false)}
+          className="text-slate-400 hover:text-slate-600 rounded-md p-1 hover:bg-slate-200/50 transition-colors"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -18,62 +33,62 @@ export function EvidencePanel() {
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Source</h3>
             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-              Hybrid Retrieval
+              {sourceType}
             </span>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-            <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-blue-600" />
-                <span className="text-sm font-medium text-slate-900">Section 4.2</span>
+          {evidence.length === 0 ? (
+            <div className="text-sm text-slate-500 italic p-4 bg-slate-50 rounded-lg border border-slate-100">
+              No specific evidence found for this selection.
+            </div>
+          ) : (
+            evidence.map((item, index) => (
+              <div key={item.id || index} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col">
+                <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-rose-500" />
+                    <span className="text-sm font-bold text-slate-900">{item.finding || "Analysis"}</span>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded border uppercase ${
+                    item.severity?.toLowerCase().includes('high') ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                    item.severity?.toLowerCase().includes('low') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {item.severity || "MEDIUM"}
+                  </span>
+                </div>
+                {item.explanation && (
+                  <div className="p-3 bg-slate-50 border-b border-slate-100">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-1 tracking-wider">Why</h4>
+                    <p className="text-sm text-slate-700">{item.explanation}</p>
+                  </div>
+                )}
+                <div className="p-3 flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Source</h4>
+                    <span className="text-xs font-medium text-slate-500">{item.page} · {item.section}</span>
+                  </div>
+                  <div className="p-3 bg-blue-50/50 rounded border border-blue-100 relative group">
+                    <p className="text-sm text-slate-700 font-serif leading-relaxed italic">
+                      "{item.sourceText}"
+                    </p>
+                  </div>
+                </div>
+                <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-end">
+                  <button className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+                    View in Document <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
-              <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                98% Match
-              </span>
-            </div>
-            <div className="p-4 bg-yellow-50/30">
-              <p className="text-sm text-slate-700 leading-relaxed font-serif">
-                &quot;Receiving Party agrees to hold all <mark className="bg-yellow-200 text-yellow-900 px-1 rounded">Confidential Information</mark> in strict confidence and not to disclose such Confidential Information to any third parties without the prior written consent of the Disclosing Party, except as required by law.&quot;
-              </p>
-            </div>
-            <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-xs text-slate-500">
-              <span>Page 3, Paragraph 2</span>
-              <button className="flex items-center gap-1 hover:text-blue-600 transition-colors">
-                View in Document <ExternalLink className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-            <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-blue-600" />
-                <span className="text-sm font-medium text-slate-900">Section 11.1</span>
-              </div>
-              <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                85% Match
-              </span>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-slate-700 leading-relaxed font-serif">
-                &quot;The obligations of confidentiality shall survive for a period of <mark className="bg-yellow-200 text-yellow-900 px-1 rounded">five (5) years</mark> from the termination of this Agreement.&quot;
-              </p>
-            </div>
-            <div className="p-2 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-xs text-slate-500">
-              <span>Page 8, Paragraph 4</span>
-              <button className="flex items-center gap-1 hover:text-blue-600 transition-colors">
-                View in Document <ExternalLink className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
+            ))
+          )}
         </div>
 
-        <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
+        <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 mt-auto">
           <div className="flex gap-2">
             <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
             <p className="text-xs text-blue-800 leading-relaxed">
-              The AI generated its response based on the evidence shown above. The highlighted terms were semantically matched to your query using hybrid vector search.
+              The AI generated its response based on the evidence shown above. Evidence is grounded entirely in the uploaded contract.
             </p>
           </div>
         </div>

@@ -2,8 +2,9 @@
 
 import { useState, use, useRef, useEffect } from "react";
 import { Bot, User, Search, Send, Paperclip, Loader2 } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { chatApi, ContractQuestionResponse } from "@/lib/api/chat";
+import { useEvidence, EvidenceItem } from "@/src/contexts/evidence-context";
 
 interface Message {
   role: "user" | "bot";
@@ -16,10 +17,27 @@ export default function ContractChat({ params }: { params: Promise<{ id: string 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { setEvidence, setSourceType, setIsOpen } = useEvidence();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const { data: historyData } = useQuery({
+    queryKey: ['chatHistory', resolvedParams.id],
+    queryFn: () => chatApi.getHistory(resolvedParams.id),
+  });
+
+  useEffect(() => {
+    if (historyData && historyData.length > 0) {
+      const formatted = historyData.map(msg => ({
+        role: msg.role === 'assistant' ? 'bot' : 'user',
+        text: msg.content,
+        response: msg.metadata ? { citations: msg.metadata.citations } : undefined
+      }));
+      setMessages(formatted as Message[]);
+    }
+  }, [historyData]);
 
   useEffect(() => {
     scrollToBottom();
@@ -32,6 +50,20 @@ export default function ContractChat({ params }: { params: Promise<{ id: string 
         ...prev,
         { role: "bot", text: data.answer, response: data }
       ]);
+      
+      // Push new evidence to context automatically
+      if (data.sources && data.sources.length > 0) {
+        const mappedEvidence: EvidenceItem[] = data.sources.map(s => ({
+          id: s.chunk_id || Math.random().toString(),
+          section: "Chat Retrieval",
+          text: s.parent_text || s.child_text || "No text available",
+          page: "Extracted passage",
+          matchScore: s.relevance_score
+        }));
+        setEvidence(mappedEvidence);
+        setSourceType("AI Chat Retrieval");
+        setIsOpen(true);
+      }
     },
     onError: () => {
       setMessages((prev) => [
@@ -110,7 +142,23 @@ export default function ContractChat({ params }: { params: Promise<{ id: string 
                       <span className="text-xs text-slate-600 font-medium">
                         Based on {msg.response.sources.length} sources
                       </span>
-                      <button className="text-xs font-medium text-blue-600 ml-auto hover:underline hover:text-blue-700 transition-colors">Show Evidence Panel</button>
+                      <button 
+                        onClick={() => {
+                          const mappedEvidence: EvidenceItem[] = msg.response!.sources.map(s => ({
+                            id: s.chunk_id || Math.random().toString(),
+                            section: "Chat Retrieval",
+                            text: s.parent_text || s.child_text || "No text available",
+                            page: "Extracted passage",
+                            matchScore: s.relevance_score
+                          }));
+                          setEvidence(mappedEvidence);
+                          setSourceType("AI Chat Retrieval");
+                          setIsOpen(true);
+                        }}
+                        className="text-xs font-medium text-blue-600 ml-auto hover:underline hover:text-blue-700 transition-colors"
+                      >
+                        Show Evidence Panel
+                      </button>
                     </div>
                   )}
                 </div>

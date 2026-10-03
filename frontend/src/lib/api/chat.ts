@@ -34,4 +34,9 @@ export const chatApi = {
     }
     return response.data as ContractQuestionResponse;
   },
+  
+  getHistory: async (contractId: string): Promise<any[]> => {
+    const response = await apiClient.get<any[]>(`/api/v1/analysis/chat/${contractId}`);
+    return response.data;
+  }
 };

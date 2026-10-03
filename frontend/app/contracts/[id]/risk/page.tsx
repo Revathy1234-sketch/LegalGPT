@@ -4,6 +4,7 @@ import { use } from "react";
 import { AlertTriangle, ShieldAlert, Info, Loader2, CheckCircle2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { analysisApi } from "@/lib/api/analysis";
+import { useEvidence, EvidenceItem } from "@/src/contexts/evidence-context";
 
 export default function RiskAnalysis({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -12,6 +13,8 @@ export default function RiskAnalysis({ params }: { params: Promise<{ id: string 
     queryKey: ['risk', resolvedParams.id],
     queryFn: () => analysisApi.risk(resolvedParams.id),
   });
+
+  const { setEvidence, setSourceType, setIsOpen } = useEvidence();
 
   const risks = data?.risk_matrix || [];
   const overallScore = data?.overall_score || 0;
@@ -73,7 +76,21 @@ export default function RiskAnalysis({ params }: { params: Promise<{ id: string 
           risks.map((risk, idx) => {
             const severity = risk.severity || risk.risk_level || ((risk.overall_score ?? 0) < -1 ? 'High' : (risk.overall_score ?? 0) < 0 ? 'Medium' : 'Low');
             return (
-              <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col sm:flex-row">
+              <div 
+                key={idx} 
+                className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col sm:flex-row cursor-pointer hover:border-blue-300 transition-colors"
+                onClick={() => {
+                  const ev: EvidenceItem = {
+                    id: String(idx),
+                    section: String(risk.issue || risk.title || "Risk Finding"),
+                    text: risk.evidence ? String(risk.evidence) : "Specific contract text not extracted. The model flagged this risk based on the section referenced.",
+                    page: (risk.source || risk.page) ? String(risk.source || risk.page) : "Contract"
+                  };
+                  setEvidence([ev]);
+                  setSourceType("Risk Analysis Agent");
+                  setIsOpen(true);
+                }}
+              >
                 <div className={`p-5 sm:w-56 shrink-0 flex flex-col justify-center border-b sm:border-b-0 sm:border-r border-slate-100 ${
                   severity === 'High' ? 'bg-rose-50/50' : severity === 'Medium' ? 'bg-amber-50/50' : 'bg-emerald-50/50'
                 }`}>

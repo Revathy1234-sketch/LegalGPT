@@ -1,7 +1,7 @@
 import logging
 import time
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -108,6 +108,22 @@ def _string_list(values: Any) -> List[str]:
         return []
     return [value if isinstance(value, str) else str(value) for value in values]
 
+def _get_cached_result(db: Session, contract_id: uuid.UUID, task_type: str) -> Optional[Dict[str, Any]]:
+    from app.models.models import AgentExecutionLog
+    log = db.query(AgentExecutionLog).filter(
+        AgentExecutionLog.contract_id == contract_id,
+        AgentExecutionLog.task_type == task_type
+    ).order_by(AgentExecutionLog.created_at.desc()).first()
+    if log and log.output_payload:
+        if isinstance(log.output_payload, dict):
+            # Output payload could be the raw dict from _serialized_response
+            if log.output_payload.get('success'):
+                return log.output_payload.get('result')
+            elif 'result' in log.output_payload:
+                return log.output_payload['result']
+            return log.output_payload
+    return None
+
 
 @router.post('/summarize/{contract_id}', response_model=ContractResponse)
 def run_summarize(
@@ -131,7 +147,18 @@ def run_summarize(
             {'success': True, 'result': {'summary': contract.summary, 'cached': True}},
             start_time, end_time,
         )
-        return contract
+        latest_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).order_by(RiskAnalysis.evaluated_at.desc()).first()
+        return {
+            "id": contract.id,
+            "file_name": contract.file_name,
+            "storage_url": contract.storage_url,
+            "status": contract.status,
+            "summary": contract.summary,
+            "uploaded_by": contract.uploaded_by,
+            "created_at": contract.created_at,
+            "clauses": contract.clause_extractions if hasattr(contract, 'clause_extractions') else [],
+            "risk_analysis": latest_risk
+        }
 
     start_time = time.perf_counter()
     response = run_summary_agent(str(contract_id))
@@ -146,12 +173,30 @@ def run_summarize(
     contract.summary = str(result.get('summary', ''))
     db.commit()
     db.refresh(contract)
-    return contract
+    
+    # Map the DB relationships to the Pydantic schema expected names
+    latest_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).order_by(RiskAnalysis.evaluated_at.desc()).first()
+    
+    # Return as dict to satisfy ContractResponse
+    response_data = {
+        "id": contract.id,
+        "file_name": contract.file_name,
+        "storage_url": contract.storage_url,
+        "status": contract.status,
+        "summary": contract.summary,
+        "uploaded_by": contract.uploaded_by,
+        "created_at": contract.created_at,
+        "clauses": contract.clause_extractions if hasattr(contract, 'clause_extractions') else [],
+        "risk_analysis": latest_risk
+    }
+    
+    return response_data
 
 
 @router.post('/risk/{contract_id}', response_model=RiskAnalysisResponse)
 def run_risk_analysis(
     contract_id: uuid.UUID,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -161,6 +206,14 @@ def run_risk_analysis(
 
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_risk_analysis', str(contract_id))
+
+    if not force:
+        cached = _get_cached_result(db, contract_id, 'risk_analysis')
+        if cached:
+            # We must also return the db_risk schema or at least a RiskAnalysisResponse compatible dict
+            db_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).first()
+            if db_risk:
+                return db_risk
 
     start_time = time.perf_counter()
     response = run_risk_agent(str(contract_id))
@@ -199,6 +252,7 @@ def run_risk_analysis(
 @router.post('/clauses/{contract_id}', response_model=ClauseExtractionResponse)
 def extract_clauses(
     contract_id: uuid.UUID,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -208,6 +262,11 @@ def extract_clauses(
 
     validate_contract_access(contract, current_user)
     log_endpoint_call('extract_clauses', str(contract_id))
+
+    if not force:
+        cached = _get_cached_result(db, contract_id, 'clause_extraction')
+        if cached:
+            return {'clauses': cached.get('clauses', [])}
 
     start_time = time.perf_counter()
     response = run_clause_agent(str(contract_id))
@@ -271,6 +330,7 @@ def extract_clauses(
 @router.post('/compliance/{contract_id}', response_model=ComplianceResponse)
 def run_compliance_analysis(
     contract_id: uuid.UUID,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -280,6 +340,15 @@ def run_compliance_analysis(
 
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_compliance_analysis', str(contract_id))
+
+    if not force:
+        cached = _get_cached_result(db, contract_id, 'compliance_check')
+        if cached:
+            return {
+                'compliant': bool(cached.get('compliant', False)),
+                'issues': cached.get('issues', []),
+                'recommendations': _string_list(cached.get('recommendations', []))
+            }
 
     start_time = time.perf_counter()
     response = run_compliance_agent(str(contract_id))
@@ -340,6 +409,7 @@ def run_compliance_analysis(
 @router.post('/negotiation/{contract_id}', response_model=NegotiationAnalysisResponse)
 def run_negotiation_analysis(
     contract_id: uuid.UUID,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -349,6 +419,17 @@ def run_negotiation_analysis(
 
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_negotiation_analysis', str(contract_id))
+
+    if not force:
+        cached = _get_cached_result(db, contract_id, 'negotiation_analysis')
+        if cached:
+            return {
+                'overall_risk_score': int(float(cached.get('overall_risk_score', 0))),
+                'overall_risk_level': str(cached.get('overall_risk_level', 'unknown')),
+                'executive_summary': str(cached.get('executive_summary', '')),
+                'negotiation_suggestions': _string_list(cached.get('negotiation_suggestions', [])),
+                'priority_actions': _string_list(cached.get('priority_actions', []))
+            }
 
     start_time = time.perf_counter()
     response = run_negotiation_agent(str(contract_id))
@@ -428,12 +509,57 @@ def chat_contract(
         raise HTTPException(status_code=404, detail='Contract not found')
 
     validate_contract_access(contract, current_user)
-    return run_chat_agent(str(contract_id), payload.question)
+    from app.models.models import ChatSession, ChatMessage
+    session = db.query(ChatSession).filter(ChatSession.user_id == current_user.id, ChatSession.contract_id == contract_id).first()
+    if not session:
+        session = ChatSession(user_id=current_user.id, contract_id=contract_id)
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        
+    user_msg = ChatMessage(session_id=session.id, sender_role="user", content=payload.question)
+    db.add(user_msg)
+    db.commit()
+
+    response = run_chat_agent(str(contract_id), payload.question)
+    
+    agent_msg = ChatMessage(
+        session_id=session.id, 
+        sender_role="assistant", 
+        content=response.get("result", {}).get("answer", ""),
+        metadata_json={"citations": response.get("result", {}).get("citations", [])}
+    )
+    db.add(agent_msg)
+    db.commit()
+    
+    return response
+
+@router.get('/chat/{contract_id}')
+def get_chat_history(
+    contract_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.models import ChatSession, ChatMessage
+    session = db.query(ChatSession).filter(ChatSession.user_id == current_user.id, ChatSession.contract_id == contract_id).first()
+    if not session:
+        return []
+    
+    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session.id).order_by(ChatMessage.created_at.asc()).all()
+    return [
+        {
+            "role": msg.sender_role,
+            "content": msg.content,
+            "metadata": msg.metadata_json,
+            "created_at": msg.created_at.isoformat()
+        } for msg in messages
+    ]
 
 
 @router.post('/knowledge-graph/{contract_id}', response_model=KnowledgeGraphResponse)
 def knowledge_graph(
     contract_id: uuid.UUID,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -442,6 +568,17 @@ def knowledge_graph(
         raise HTTPException(status_code=404, detail='Contract not found')
 
     validate_contract_access(contract, current_user)
+
+    if not force:
+        cached = _get_cached_result(db, contract_id, 'knowledge_graph')
+        if cached:
+            return {
+                "success": True,
+                "result": {
+                    "entities": cached.get("nodes", []),
+                    "relationships": cached.get("edges", [])
+                }
+            }
 
     start_time = time.perf_counter()
     agent_response = run_knowledge_graph_agent(str(contract_id))

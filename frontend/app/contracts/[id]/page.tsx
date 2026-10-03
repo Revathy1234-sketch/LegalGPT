@@ -63,8 +63,35 @@ export default function ContractOverview({ params }: { params: Promise<{ id: str
                 {data.summary || "No summary available."}
               </div>
             </div>
-            {/* Reusing RiskOverview but passing empty data for now, since summarize API doesn't return full distribution */}
-            <RiskOverview data={[]} />
+            {/* Calculate distribution for this specific contract if available */}
+            <RiskOverview data={
+              data.risk_analysis?.risk_matrix ? (
+                (() => {
+                  let h = 0, m = 0, l = 0;
+                  const h_f: any[] = [];
+                  const m_f: any[] = [];
+                  const l_f: any[] = [];
+                  const matrix = data.risk_analysis.risk_matrix as any[];
+                  matrix.forEach((r: any) => {
+                    const sev = r.severity?.toLowerCase() || r.risk_level?.toLowerCase() || '';
+                    const finding = {
+                        category: r.category || "General",
+                        description: r.description || "",
+                        impact: r.impact || "",
+                        evidence: r.evidence || ""
+                    };
+                    if (sev === 'high' || sev === 'critical') { h++; h_f.push(finding); }
+                    else if (sev === 'medium') { m++; m_f.push(finding); }
+                    else { l++; l_f.push(finding); }
+                  });
+                  return [
+                    { name: 'High Risk', value: h, color: '#f43f5e', findings: h_f },
+                    { name: 'Medium Risk', value: m, color: '#f59e0b', findings: m_f },
+                    { name: 'Low Risk', value: l, color: '#10b981', findings: l_f }
+                  ];
+                })()
+              ) : []
+            } />
           </div>
         </>
       ) : null}

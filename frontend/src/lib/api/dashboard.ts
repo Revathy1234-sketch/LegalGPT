@@ -29,6 +29,12 @@ export interface RiskDistribution {
   name: string;
   value: number;
   color: string;
+  findings: Array<{
+    category: string;
+    description: string;
+    impact: string;
+    evidence: string;
+  }>;
 }
 
 export interface DashboardData {
@@ -36,11 +42,19 @@ export interface DashboardData {
   recent_activity: RecentActivity[];
   recent_contracts: RecentContract[];
   risk_distribution: RiskDistribution[];
+  contract_types?: { type: string; count: number }[];
+  status_distribution?: { name: string; value: number; color: string }[];
+  risk_radar?: { category: string; score: number }[];
+  agent_usage?: { name: string; count: number }[];
 }
 
 export const dashboardApi = {
   getStats: async (): Promise<DashboardData> => {
     const response = await apiClient.get<DashboardData>('/api/v1/dashboard/stats');
+    return response.data;
+  },
+  getAgentStatus: async (): Promise<Array<{name: string, status: string, executions: number}>> => {
+    const response = await apiClient.get('/api/v1/dashboard/agent-status');
     return response.data;
   },
 };

@@ -4,6 +4,7 @@ import { use } from "react";
 import { Search, ChevronDown, CheckCircle2, AlertTriangle, ShieldAlert, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { analysisApi } from "@/lib/api/analysis";
+import { useEvidence, EvidenceItem } from "@/src/contexts/evidence-context";
 
 export default function Clauses({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -12,6 +13,8 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
     queryKey: ['clauses', resolvedParams.id],
     queryFn: () => analysisApi.clauses(resolvedParams.id),
   });
+
+  const { setEvidence, setSourceType, setIsOpen } = useEvidence();
 
   const clauses = data?.clauses || [];
 
@@ -73,7 +76,22 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
                 </tr>
               ) : (
                 clauses.map((clause, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                  <tr 
+                    key={idx} 
+                    className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    onClick={() => {
+                      const c = clause as any;
+                      const ev: EvidenceItem = {
+                        id: String(idx),
+                        section: c.title || "Clause Extraction",
+                        text: c.text || c.content || "Specific contract text not available for this clause.",
+                        page: c.page || "Contract"
+                      };
+                      setEvidence([ev]);
+                      setSourceType("Clause Agent");
+                      setIsOpen(true);
+                    }}
+                  >
                     <td className="px-6 py-4 font-semibold text-slate-900">{clause.title}</td>
                     <td className="px-6 py-4 text-slate-600">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
