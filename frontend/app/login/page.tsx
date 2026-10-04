@@ -64,7 +64,7 @@ export default function Login() {
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-slate-900">
           Sign in to LegalGPT
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
+        <p className="mt-2 text-center text-sm text-slate-700/80">
           Or{" "}
           <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500 transition-colors">
             create a new account
@@ -79,12 +79,12 @@ export default function Login() {
               <label className="block text-sm font-medium text-slate-700">Email address</label>
               <div className="mt-2 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-400" />
+                  <Mail className="h-5 w-5 text-slate-700/40" />
                 </div>
                 <input
                   type="email"
                   {...register("email")}
-                  className="block w-full pl-10 py-2 sm:text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-colors bg-slate-50 focus:bg-white"
+                  className="block w-full pl-10 py-2 sm:text-sm border border-slate-200/80 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-colors bg-slate-50 focus:bg-white"
                   placeholder="you@example.com"
                 />
               </div>
@@ -95,12 +95,12 @@ export default function Login() {
               <label className="block text-sm font-medium text-slate-700">Password</label>
               <div className="mt-2 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-400" />
+                  <Lock className="h-5 w-5 text-slate-700/40" />
                 </div>
                 <input
                   type="password"
                   {...register("password")}
-                  className="block w-full pl-10 py-2 sm:text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-colors bg-slate-50 focus:bg-white"
+                  className="block w-full pl-10 py-2 sm:text-sm border border-slate-200/80 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition-colors bg-slate-50 focus:bg-white"
                   placeholder="••••••••"
                 />
               </div>
@@ -113,7 +113,7 @@ export default function Login() {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-600 border-slate-300 rounded outline-none"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-600 border-slate-200/80 rounded outline-none"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-900">
                   Remember me
@@ -131,7 +131,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loginMutation.isPending}
-                className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-600/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {loginMutation.isPending ? (
                   <Loader2 className="h-5 w-5 animate-spin" />

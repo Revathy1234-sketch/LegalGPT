@@ -7,7 +7,9 @@ import { ContractNavigation } from "@/src/components/contracts/contract-navigati
 import { EvidencePanel } from "@/src/components/contracts/evidence-panel";
 import { useQuery } from "@tanstack/react-query";
 import { contractsApi } from "@/lib/api/contracts";
-import { EvidenceProvider } from "@/src/contexts/evidence-context";
+import { EvidenceProvider, useEvidence } from "@/src/contexts/evidence-context";
+import { EvidenceToggle } from "@/src/components/contracts/evidence-toggle";
+import { riskLevel, riskBadgeClass } from "@/src/lib/risk-utils";
 
 export default function ContractLayout({ children, params }: { children: ReactNode, params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -40,11 +42,9 @@ export default function ContractLayout({ children, params }: { children: ReactNo
                 </span>
                 {contract?.risk_analysis && (
                   <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${
-                    contract.risk_analysis.overall_score < -1 ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                    contract.risk_analysis.overall_score < 0 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                    'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    riskBadgeClass(riskLevel(contract.risk_analysis.overall_score))
                   }`}>
-                    {contract.risk_analysis.overall_score < -1 ? 'High Risk' : contract.risk_analysis.overall_score < 0 ? 'Medium Risk' : 'Low Risk'}
+                    {riskLevel(contract.risk_analysis.overall_score)} Risk · {contract.risk_analysis.overall_score}/100
                   </span>
                 )}
               </>
@@ -60,18 +60,27 @@ export default function ContractLayout({ children, params }: { children: ReactNo
 
           {/* Main Content Area */}
           <main className="flex-1 overflow-y-auto bg-slate-50 relative">
-            <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+            <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full">
               {children}
             </div>
           </main>
 
-          {/* Right Evidence Panel */}
-          <div className="w-80 border-l border-slate-200 bg-white hidden lg:flex flex-col shrink-0 relative z-10 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
-            <EvidencePanel />
-          </div>
+          {/* Right Evidence Panel — hidden/shown by the floating toggle */}
+          <ContractEvidenceColumn />
         </div>
       </div>
+      <EvidenceToggle />
     </div>
     </EvidenceProvider>
+  );
+}
+
+function ContractEvidenceColumn() {
+  const { isOpen } = useEvidence();
+  if (!isOpen) return null;
+  return (
+    <div className="w-80 border-l border-slate-200 bg-white hidden lg:flex flex-col shrink-0 relative z-10 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
+      <EvidencePanel />
+    </div>
   );
 }

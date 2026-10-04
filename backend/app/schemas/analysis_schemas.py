@@ -63,17 +63,30 @@ class NegotiationAnalysisResponse(BaseModel):
     negotiation_suggestions: List[dict]
 
 class KnowledgeGraphEntity(BaseModel):
+    # Preserve the full react-flow node (data.label, position, ...) so the
+    # frontend graph viewer can render names, types and layout coordinates.
+    model_config = {"extra": "allow"}
+
     id: str
     type: str
     name: Optional[str] = None
     label: Optional[str] = None
     description: Optional[str] = None
+    data: Optional[dict] = None
+    position: Optional[dict] = None
 
 class KnowledgeGraphRelationship(BaseModel):
+    # Preserve edge extras (label, animated, data.type) used by the viewer.
+    model_config = {"extra": "allow"}
+
+    id: Optional[str] = None
     source: str
     target: str
     type: Optional[str] = None
     relationship: Optional[str] = None
+    label: Optional[str] = None
+    animated: Optional[bool] = None
+    data: Optional[dict] = None
 
 class KnowledgeGraphResult(BaseModel):
     entities: List[KnowledgeGraphEntity]

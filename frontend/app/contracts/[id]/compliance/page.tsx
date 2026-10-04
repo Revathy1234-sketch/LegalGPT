@@ -1,17 +1,34 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useRef } from "react";
 import { ShieldCheck, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { analysisApi } from "@/lib/api/analysis";
+import { useEvidence } from "@/src/contexts/evidence-context";
+import { evidenceFromCompliance } from "@/src/lib/evidence-mapper";
 
 export default function Compliance({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
+  const evidence = useEvidence();
+  const loadedFor = useRef<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['compliance', resolvedParams.id],
     queryFn: () => analysisApi.compliance(resolvedParams.id),
   });
+
+  // Automatic evidence for the Compliance agent.
+  useEffect(() => {
+    if (!data || loadedFor.current === resolvedParams.id) return;
+    loadedFor.current = resolvedParams.id;
+    const items = evidenceFromCompliance(data.issues as unknown as Array<Record<string, unknown>>);
+    if (items.length > 0) {
+      evidence.setSourceType("Compliance Agent");
+      evidence.setEvidence(items);
+      evidence.setIsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, resolvedParams.id]);
 
   const issues = data?.issues || [];
   const recommendations = data?.recommendations || [];
@@ -21,7 +38,7 @@ export default function Compliance({ params }: { params: Promise<{ id: string }>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Compliance Status</h2>
-          <p className="text-slate-500 mt-1 font-medium">Assessment against regulatory frameworks and company policies.</p>
+          <p className="text-slate-700/60 mt-1 font-medium">Assessment against regulatory frameworks and company policies.</p>
         </div>
         {!isLoading && !isError && (
           <div className={`px-3 py-2 rounded-lg border flex items-center gap-2 shadow-sm ${
@@ -36,7 +53,7 @@ export default function Compliance({ params }: { params: Promise<{ id: string }>
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+        <div className="flex flex-col items-center justify-center py-20 text-slate-700/60">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
           <p>Running compliance checks...</p>
         </div>
@@ -48,7 +65,7 @@ export default function Compliance({ params }: { params: Promise<{ id: string }>
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {issues.length === 0 ? (
-              <div className="col-span-full bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 shadow-sm">
+              <div className="col-span-full bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-700/60 shadow-sm">
                 No specific compliance issues found.
               </div>
             ) : issues.map((issue, idx) => {
@@ -63,7 +80,7 @@ export default function Compliance({ params }: { params: Promise<{ id: string }>
                     </div>
                     <h3 className="font-bold text-slate-900">{issue.framework || issue.clause_type}</h3>
                   </div>
-                  <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                  <p className="text-sm text-slate-700/80 leading-relaxed font-medium">
                     {issue.gap_analysis || issue.status}
                   </p>
                 </div>

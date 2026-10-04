@@ -4,13 +4,19 @@ from sqlalchemy import func, or_
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime
+import os
 import uuid
 
 from app.api.v1.auth import get_current_user
 from app.core.database import get_db
-from app.models.models import User, Contract, ContractRiskAssessment, AgentExecutionLog
+from app.models.models import User, Contract, ContractRiskAssessment, AgentExecutionLog, RiskAnalysis
+from app.services.evidence_grounding import ground_and_persist
 
 router = APIRouter()
+
+# overall_score is 0-100 where higher = riskier (see risk prompt contract)
+HIGH_RISK_THRESHOLD = 70
+MEDIUM_RISK_THRESHOLD = 40
 
 class DashboardStats(BaseModel):
     total_contracts: int
@@ -97,13 +103,27 @@ def get_dashboard_stats(
 
     total_contracts = len(contracts)
 
-    # 2. High Risk count
-    high_risk_count = 0
+    # Latest real risk assessment per contract (0-100 scale, higher = riskier)
+    latest_risk: dict = {}
     if contract_ids:
-        high_risk_count = db.query(ContractRiskAssessment).filter(
-            ContractRiskAssessment.contract_id.in_(contract_ids),
-            ContractRiskAssessment.overall_score < -1
-        ).count()
+        risk_rows = (
+            db.query(RiskAnalysis)
+            .filter(RiskAnalysis.contract_id.in_(contract_ids))
+            .order_by(RiskAnalysis.evaluated_at.asc())
+            .all()
+        )
+        for row in risk_rows:
+            latest_risk[row.contract_id] = row  # ascending order => last wins
+
+    # Make sure every finding carries verbatim PDF proof (ground + persist once)
+    for cid, row in list(latest_risk.items()):
+        ground_and_persist(db, cid, row)
+
+    # 2. High Risk count (contracts with score >= 70)
+    high_risk_count = sum(
+        1 for row in latest_risk.values()
+        if (row.overall_score or 0) >= HIGH_RISK_THRESHOLD
+    )
 
     # 3. Statuses
     pending_count = sum(1 for c in contracts if c.status.lower() in ["pending", "processing"])
@@ -115,7 +135,7 @@ def get_dashboard_stats(
             AgentExecutionLog.contract_id.in_(contract_ids)
         ).count()
 
-    # 5. Risk Distribution
+    # 5. Risk Distribution - built from the real risk_matrix (with PDF evidence)
     low_risk = 0
     medium_risk = 0
     high_risk = 0
@@ -124,48 +144,59 @@ def get_dashboard_stats(
     medium_findings = []
     low_findings = []
 
-    if contract_ids:
-        assessments = db.query(ContractRiskAssessment).filter(
-            ContractRiskAssessment.contract_id.in_(contract_ids)
-        ).all()
+    for row in latest_risk.values():
+        matrix = row.risk_matrix if isinstance(row.risk_matrix, list) else []
+        for finding in matrix:
+            if not isinstance(finding, dict):
+                continue
+            severity = (
+                finding.get("severity")
+                or finding.get("risk_level")
+                or finding.get("likelihood")
+                or "Medium"
+            )
+            sev_lower = str(severity).lower()
 
-        # Count findings from risk_matrix
-        for a in assessments:
-            if a.risk_matrix and isinstance(a.risk_matrix, list):
-                for finding in a.risk_matrix:
-                    # Depending on how it's stored, it might have a 'severity', 'level', or 'status'
-                    # Or we just use the overall score of the assessment if finding level isn't specified
-                    severity = finding.get('severity') or finding.get('status') or 'Medium'
-                    sev_lower = str(severity).lower()
-                    
-                    finding_data = {
-                        "category": finding.get("category", "General"),
-                        "description": finding.get("issue") or finding.get("description", "No description"),
-                        "impact": finding.get("financial_impact") or finding.get("impact", ""),
-                        "evidence": finding.get("clause_reference") or finding.get("evidence", ""),
-                        "page": finding.get("page", ""),
-                        "section": finding.get("section", ""),
-                        "source_text": finding.get("source_text", "")
-                    }
+            finding_data = {
+                "category": finding.get("category", "General"),
+                "description": finding.get("issue")
+                or finding.get("description")
+                or finding.get("title")
+                or "No description",
+                "impact": finding.get("financial_impact")
+                or finding.get("impact")
+                or finding.get("business_impact")
+                or "",
+                "evidence": finding.get("clause_reference")
+                or finding.get("evidence")
+                or "",
+                "page": finding.get("page", ""),
+                "section": finding.get("section", ""),
+                "source_text": finding.get("source_text", ""),
+                "mitigation": finding.get("mitigation", ""),
+                "severity": str(severity),
+            }
 
-                    if 'high' in sev_lower or 'critical' in sev_lower or 'non-compliant' in sev_lower:
-                        high_risk += 1
-                        high_findings.append(finding_data)
-                    elif 'low' in sev_lower or 'info' in sev_lower:
-                        low_risk += 1
-                        low_findings.append(finding_data)
-                    else:
-                        medium_risk += 1
-                        medium_findings.append(finding_data)
+            if "high" in sev_lower or "critical" in sev_lower or "non-compliant" in sev_lower:
+                high_risk += 1
+                high_findings.append(finding_data)
+            elif "low" in sev_lower or "info" in sev_lower or "compliant" in sev_lower:
+                low_risk += 1
+                low_findings.append(finding_data)
             else:
-                # Fallback to contract-level score if no matrix
-                score = a.overall_score if a.overall_score is not None else 0
-                if score < -1:
-                    high_risk += 1
-                elif score < 0:
-                    medium_risk += 1
-                else:
-                    low_risk += 1
+                medium_risk += 1
+                medium_findings.append(finding_data)
+
+    # Contracts assessed but with an empty matrix: bucket by overall score
+    for row in latest_risk.values():
+        if isinstance(row.risk_matrix, list) and len(row.risk_matrix) == 0:
+            score = row.overall_score or 0
+            if score >= HIGH_RISK_THRESHOLD:
+                high_risk += 1
+            elif score >= MEDIUM_RISK_THRESHOLD:
+                medium_risk += 1
+            else:
+                low_risk += 1
 
     risk_distribution = [
         {"name": "High Risk", "value": high_risk, "color": "#f43f5e", "findings": high_findings},
@@ -181,11 +212,16 @@ def get_dashboard_stats(
         latest_log = db.query(AgentExecutionLog).filter(AgentExecutionLog.contract_id == c.id).order_by(AgentExecutionLog.created_at.desc()).first()
         last_analysis = _time_ago(latest_log.created_at) if latest_log else "Never"
 
-        # get risk
+        # get risk label from the latest real risk analysis (0-100 scale)
         risk_label = "Unknown"
-        c_risk = db.query(ContractRiskAssessment).filter(ContractRiskAssessment.contract_id == c.id).order_by(ContractRiskAssessment.evaluated_at.desc()).first()
+        c_risk = latest_risk.get(c.id)
         if c_risk:
-            risk_label = "High" if c_risk.overall_score < -1 else "Medium" if c_risk.overall_score < 0 else "Low"
+            score = c_risk.overall_score or 0
+            risk_label = (
+                "High" if score >= HIGH_RISK_THRESHOLD
+                else "Medium" if score >= MEDIUM_RISK_THRESHOLD
+                else "Low"
+            )
 
         recent_contracts.append(RecentContract(
             id=str(c.id),
@@ -239,21 +275,30 @@ def get_dashboard_stats(
         {"name": "Pending", "value": pending_count, "color": "#f59e0b"}
     ]
     
-    # Contract Types
+    # Contract Types (derived from file extension; Contract has no `type` column)
     type_counts = {}
     for c in contracts:
-        ctype = c.type or "PDF"
-        type_counts[ctype] = type_counts.get(ctype, 0) + 1
+        ext = (os.path.splitext(c.file_name or "")[1] or ".pdf").lstrip(".").upper()
+        type_counts[ext] = type_counts.get(ext, 0) + 1
     contract_types = [{"type": k, "count": v} for k, v in type_counts.items()]
     
-    # Risk Radar
-    risk_radar = [
-        {"category": "Financial", "score": min(high_risk_count * 20, 100)},
-        {"category": "Operational", "score": min(medium_risk * 15, 100)},
-        {"category": "Legal", "score": min(high_risk * 25, 100)},
-        {"category": "Compliance", "score": min((high_risk + medium_risk) * 10, 100)},
-        {"category": "Reputation", "score": min(low_risk * 5, 100)},
-    ]
+    # Risk Radar - derived from real findings categories
+    category_scores = {}
+    for row in latest_risk.values():
+        matrix = row.risk_matrix if isinstance(row.risk_matrix, list) else []
+        for finding in matrix:
+            if not isinstance(finding, dict): continue
+            cat = finding.get("category", "General")
+            sev = str(finding.get("severity", "Medium")).lower()
+            val = 20 if "high" in sev or "critical" in sev else 10 if "medium" in sev else 5
+            category_scores[cat] = category_scores.get(cat, 0) + val
+            
+    risk_radar = []
+    for cat, score in category_scores.items():
+        risk_radar.append({"category": cat, "score": min(score, 100)})
+        
+    if not risk_radar:
+        risk_radar = [{"category": "No Risks Found", "score": 0}]
     
     # Agent Usage
     agent_counts = {}
@@ -281,23 +326,32 @@ def get_dashboard_stats(
 
 @router.get("/agent-status")
 def get_agent_status(db: Session = Depends(get_db)):
-    # Simple check for now: count recent successful executions per agent
+    from app.models.models import ChatMessage
+    
     agents = [
         {"name": "SummaryAgent", "label": "Summary", "task": "summarize"},
         {"name": "ClauseAgent", "label": "Clauses", "task": "clause_extraction"},
         {"name": "RiskAgent", "label": "Risk", "task": "risk_analysis"},
         {"name": "ComplianceAgent", "label": "Compliance", "task": "compliance_check"},
         {"name": "NegotiationAgent", "label": "Negotiation", "task": "negotiation_analysis"},
-        {"name": "KnowledgeGraphAgent", "label": "Knowledge Graph", "task": "knowledge_graph"}
+        {"name": "ComparisonAgent", "label": "Comparison", "task": "comparison"},
+        {"name": "KnowledgeGraphAgent", "label": "Knowledge Graph", "task": "knowledge_graph"},
+        {"name": "Retrieval", "label": "Retrieval", "task": "retrieval"},
+        {"name": "Chat", "label": "Chat", "task": "chat"}
     ]
     status = []
+    
+    from app.models.models import ChatSession
+    
     for a in agents:
-        count = db.query(AgentExecutionLog).filter(AgentExecutionLog.agent_name == a["name"]).count()
+        if a["task"] == "chat":
+            count = db.query(ChatSession).count()
+        else:
+            count = db.query(AgentExecutionLog).filter(AgentExecutionLog.task_type == a["task"]).count()
+            
         status.append({
             "name": a["label"],
             "status": "Active" if count > 0 else "Ready",
             "executions": count
         })
-    status.insert(0, {"name": "Retrieval", "status": "Active", "executions": -1})
-    status.append({"name": "Chat", "status": "Ready", "executions": 0})
     return status

@@ -12,13 +12,13 @@ export function RecentContracts({ contracts }: Props) {
       <div className="p-5 sm:p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Recent Contracts</h2>
-          <p className="text-sm text-slate-500 mt-1">Latest documents uploaded to the workspace.</p>
+          <p className="text-sm text-slate-700/60 mt-1">Latest documents uploaded to the workspace.</p>
         </div>
-        <button className="text-sm text-blue-600 font-medium hover:text-blue-700 self-start sm:self-auto">View All</button>
+        <button className="text-sm text-blue-600 font-medium hover:text-blue-600/90 self-start sm:self-auto">View All</button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left whitespace-nowrap">
-          <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+          <thead className="bg-slate-50 text-slate-700/60 font-medium border-b border-slate-200">
             <tr>
               <th className="px-6 py-3 font-medium">Contract</th>
               <th className="px-6 py-3 font-medium">Type</th>
@@ -32,7 +32,7 @@ export function RecentContracts({ contracts }: Props) {
           <tbody className="divide-y divide-slate-100">
             {contracts.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-10 text-center text-slate-500">
+                <td colSpan={7} className="px-6 py-10 text-center text-slate-700/60">
                   No contracts uploaded yet.
                 </td>
               </tr>
@@ -46,12 +46,12 @@ export function RecentContracts({ contracts }: Props) {
                     <Link href={`/contracts/${contract.id}`} className="font-medium text-slate-900 hover:text-blue-600">{contract.name}</Link>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-slate-600">{contract.type}</td>
-                <td className="px-6 py-4 text-slate-600">{contract.date}</td>
+                <td className="px-6 py-4 text-slate-700/80">{contract.type}</td>
+                <td className="px-6 py-4 text-slate-700/80">{contract.date}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                     contract.status.toLowerCase() === 'processed' || contract.status.toLowerCase() === 'ready' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    contract.status.toLowerCase() === 'processing' || contract.status.toLowerCase() === 'pending' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    contract.status.toLowerCase() === 'processing' || contract.status.toLowerCase() === 'pending' ? 'bg-blue-50 text-blue-600/90 border-blue-200' :
                     'bg-amber-50 text-amber-700 border-amber-200'
                   }`}>
                     {contract.status}
@@ -66,9 +66,9 @@ export function RecentContracts({ contracts }: Props) {
                     {contract.risk}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-slate-600">{contract.lastAnalysis}</td>
+                <td className="px-6 py-4 text-slate-700/80">{contract.lastAnalysis}</td>
                 <td className="px-6 py-4 text-right">
-                  <Link href={`/contracts/${contract.id}`} className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors outline-none focus:ring-2 focus:ring-slate-200">
+                  <Link href={`/contracts/${contract.id}`} className="text-slate-700/40 hover:text-slate-700/80 p-1 rounded-md hover:bg-slate-100 transition-colors outline-none focus:ring-2 focus:ring-slate-200">
                     <MoreHorizontal className="h-5 w-5 inline-block" />
                   </Link>
                 </td>

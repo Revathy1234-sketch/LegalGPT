@@ -10,11 +10,11 @@ export function RecentActivity({ activities }: Props) {
     <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm flex flex-col h-[380px]">
       <div className="mb-4 shrink-0">
         <h2 className="text-lg font-semibold text-slate-900">Recent Activity</h2>
-        <p className="text-sm text-slate-500 mt-1">Latest actions in your workspace.</p>
+        <p className="text-sm text-slate-700/60 mt-1">Latest actions in your workspace.</p>
       </div>
       <div className="flex-1 overflow-y-auto pr-2 space-y-5 custom-scrollbar">
         {activities.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-slate-500 text-sm">No recent activity.</div>
+          <div className="flex items-center justify-center h-full text-slate-700/60 text-sm">No recent activity.</div>
         ) : (
           activities.map((activity) => {
             const Icon = activity.type === 'upload' ? FileUp :
@@ -35,8 +35,8 @@ export function RecentActivity({ activities }: Props) {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-900">{activity.title}</p>
-                  <p className="text-sm text-slate-600 mt-0.5">{activity.target}</p>
-                  <p className="text-xs text-slate-400 mt-1.5">{activity.time}</p>
+                  <p className="text-sm text-slate-700/80 mt-0.5">{activity.target}</p>
+                  <p className="text-xs text-slate-700/40 mt-1.5">{activity.time}</p>
                 </div>
               </div>
             );

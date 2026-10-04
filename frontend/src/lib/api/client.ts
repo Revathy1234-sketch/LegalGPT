@@ -1,12 +1,14 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://legalgpt-backend.fastapicloud.dev';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  // Long timeout for AI agents (compliance/negotiation/KG can take 60-90s)
+  timeout: 120000,
 });
 
 // Add a request interceptor to inject the token

@@ -21,14 +21,16 @@ export default function Settings() {
   const [email, setEmail] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (user) {
-      const parts = user.full_name.split(" ");
-      setFirstName(parts[0] || "");
-      setLastName(parts.slice(1).join(" ") || "");
-      setEmail(user.email || "");
-    }
-  }, [user]);
+  // React-endorsed "adjust state when props/data change" pattern (render-phase
+  // update) instead of a setState-in-effect call.
+  const [syncedUser, setSyncedUser] = useState<typeof user>(undefined);
+  if (user && user !== syncedUser) {
+    setSyncedUser(user);
+    const parts = user.full_name.split(" ");
+    setFirstName(parts[0] || "");
+    setLastName(parts.slice(1).join(" ") || "");
+    setEmail(user.email || "");
+  }
 
   const updateProfileMutation = useMutation({
     mutationFn: usersApi.updateMe,
@@ -70,7 +72,7 @@ export default function Settings() {
     <AppShell>
       <div className="mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Settings</h1>
-        <p className="text-slate-500 mt-1 font-medium">Manage your account, organization, and preferences.</p>
+        <p className="text-slate-700/60 mt-1 font-medium">Manage your account, organization, and preferences.</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-8">
@@ -83,7 +85,7 @@ export default function Settings() {
                 className={`flex items-center gap-3 px-3 py-2.5 w-full text-left rounded-lg font-semibold text-sm transition-colors border ${
                   activeTab === item.id
                     ? "bg-white text-blue-600 shadow-sm border-slate-200"
-                    : "text-slate-600 border-transparent hover:bg-slate-200/50 hover:text-slate-900"
+                    : "text-slate-700/80 border-transparent hover:bg-slate-200/50 hover:text-slate-900"
                 }`}
               >
                 {item.icon} {item.label}
@@ -98,7 +100,7 @@ export default function Settings() {
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-5 border-b border-slate-200 bg-slate-50">
                   <h3 className="font-bold text-slate-900">Profile Information</h3>
-                  <p className="text-sm text-slate-500 mt-1 font-medium">Update your account details and email address.</p>
+                  <p className="text-sm text-slate-700/60 mt-1 font-medium">Update your account details and email address.</p>
                 </div>
                 <div className="p-5 sm:p-6 space-y-6">
                   {isLoading ? (
@@ -121,7 +123,7 @@ export default function Settings() {
                           <button 
                             onClick={() => fileInputRef.current?.click()}
                             disabled={updateAvatarMutation.isPending}
-                            className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                            className="px-3 py-1.5 bg-white border border-slate-200/80 text-slate-700 rounded-md hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
                             {updateAvatarMutation.isPending ? 'Uploading...' : 'Change Avatar'}
                           </button>
                         </div>
@@ -130,15 +132,15 @@ export default function Settings() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-bold text-slate-700 mb-2">First Name</label>
-                          <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
+                          <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full px-3 py-2 border border-slate-200/80 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
                         </div>
                         <div>
                           <label className="block text-sm font-bold text-slate-700 mb-2">Last Name</label>
-                          <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
+                          <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full px-3 py-2 border border-slate-200/80 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
                         </div>
                         <div className="sm:col-span-2">
                           <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
-                          <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
+                          <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-200/80 rounded-md text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white" />
                         </div>
                       </div>
                     </>
@@ -148,7 +150,7 @@ export default function Settings() {
                   <button 
                     onClick={handleSaveProfile}
                     disabled={updateProfileMutation.isPending}
-                    className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50">
+                    className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-600/90 font-medium text-sm transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50">
                     {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
@@ -157,13 +159,13 @@ export default function Settings() {
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-5 border-b border-slate-200 bg-slate-50">
                   <h3 className="font-bold text-slate-900">Preferences</h3>
-                  <p className="text-sm text-slate-500 mt-1 font-medium">Manage your application experience.</p>
+                  <p className="text-sm text-slate-700/60 mt-1 font-medium">Manage your application experience.</p>
                 </div>
                 <div className="p-5 sm:p-6 space-y-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-slate-900">Email Notifications</h4>
-                      <p className="text-sm text-slate-500 mt-0.5 font-medium">Receive email alerts when a contract analysis is complete.</p>
+                      <p className="text-sm text-slate-700/60 mt-0.5 font-medium">Receive email alerts when a contract analysis is complete.</p>
                     </div>
                     <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
                       <input type="checkbox" name="toggle" id="toggle1" defaultChecked className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-blue-600 appearance-none cursor-pointer translate-x-5 transition-transform" />
@@ -173,10 +175,10 @@ export default function Settings() {
                   <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-slate-900">Compact View</h4>
-                      <p className="text-sm text-slate-500 mt-0.5 font-medium">Use less whitespace in tables and lists.</p>
+                      <p className="text-sm text-slate-700/60 mt-0.5 font-medium">Use less whitespace in tables and lists.</p>
                     </div>
                     <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                      <input type="checkbox" name="toggle2" id="toggle2" className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform" />
+                      <input type="checkbox" name="toggle2" id="toggle2" className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-200/80 appearance-none cursor-pointer transition-transform" />
                       <label htmlFor="toggle2" className="toggle-label block overflow-hidden h-5 rounded-full bg-slate-300 cursor-pointer"></label>
                     </div>
                   </div>
@@ -186,7 +188,7 @@ export default function Settings() {
           )}
 
           {activeTab !== "profile" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-10 flex flex-col items-center justify-center text-slate-500">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-10 flex flex-col items-center justify-center text-slate-700/60">
               <div className="h-12 w-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
                 {navItems.find(i => i.id === activeTab)?.icon}
               </div>

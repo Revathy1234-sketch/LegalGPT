@@ -12,15 +12,15 @@ interface StatCardProps {
 
 export function StatCard({ title, value, icon, trend }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-slate-500">{title}</h3>
-        <div className="p-2 bg-blue-50/50 rounded-lg text-blue-600">
+        <h3 className="text-sm font-medium text-slate-700/60 dark:text-slate-400">{title}</h3>
+        <div className="p-2 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
           {icon}
         </div>
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold text-slate-900">{value}</span>
+        <span className="text-2xl font-bold text-slate-900 dark:text-white">{value}</span>
         {trend && (
           <span className={`text-xs font-medium ${trend.isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
             {trend.isPositive ? '↑' : '↓'} {trend.value}

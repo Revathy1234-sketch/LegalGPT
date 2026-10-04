@@ -25,16 +25,23 @@ export interface RecentContract {
   lastAnalysis: string;
 }
 
+export interface RiskFinding {
+  category?: string;
+  description?: string;
+  impact?: string;
+  evidence?: string;
+  page?: string;
+  section?: string;
+  source_text?: string;
+  mitigation?: string;
+  severity?: string;
+}
+
 export interface RiskDistribution {
   name: string;
   value: number;
   color: string;
-  findings: Array<{
-    category: string;
-    description: string;
-    impact: string;
-    evidence: string;
-  }>;
+  findings: RiskFinding[];
 }
 
 export interface DashboardData {

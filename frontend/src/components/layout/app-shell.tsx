@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { EvidenceToggle } from "@/src/components/contracts/evidence-toggle";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden selection:bg-blue-100 selection:text-blue-900">
+    <div className="flex h-screen bg-background font-sans text-foreground overflow-hidden selection:bg-primary/20 selection:text-primary">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar />
@@ -14,6 +15,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+      {/* Floating Evidence open/close button (rules 4 & 10). Renders only
+          on pages that provide EvidenceContext. */}
+      <EvidenceToggle />
     </div>
   );
 }

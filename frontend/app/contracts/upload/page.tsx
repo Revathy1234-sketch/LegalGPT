@@ -64,7 +64,7 @@ export default function UploadContract() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Upload Contract</h1>
-          <p className="text-slate-500 mt-1 font-medium">Add a new document to your workspace for analysis.</p>
+          <p className="text-slate-700/60 mt-1 font-medium">Add a new document to your workspace for analysis.</p>
         </div>
       </div>
 
@@ -76,18 +76,18 @@ export default function UploadContract() {
               <span className="ml-3 hidden sm:block">Upload</span>
             </div>
             <ChevronRight className="h-5 w-5 text-slate-300 mx-3 sm:mx-4" />
-            <div className="flex items-center text-slate-400">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white">2</span>
+            <div className="flex items-center text-slate-700/40">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-200/80 bg-white">2</span>
               <span className="ml-3 hidden sm:block">Process</span>
             </div>
             <ChevronRight className="h-5 w-5 text-slate-300 mx-3 sm:mx-4" />
-            <div className="flex items-center text-slate-400">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white">3</span>
+            <div className="flex items-center text-slate-700/40">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-200/80 bg-white">3</span>
               <span className="ml-3 hidden sm:block">Analyze</span>
             </div>
             <ChevronRight className="h-5 w-5 text-slate-300 mx-3 sm:mx-4" />
-            <div className="flex items-center text-slate-400">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white">4</span>
+            <div className="flex items-center text-slate-700/40">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-200/80 bg-white">4</span>
               <span className="ml-3 hidden sm:block">Review</span>
             </div>
           </div>
@@ -97,7 +97,7 @@ export default function UploadContract() {
           {!file ? (
             <div
               className={`mt-2 flex justify-center rounded-xl border-2 border-dashed px-6 py-16 transition-all ${
-                isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-400"
+                isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200/80 bg-slate-50 hover:bg-slate-100 hover:border-slate-400"
               }`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -107,17 +107,17 @@ export default function UploadContract() {
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 mb-4 shadow-sm border border-blue-200">
                   <UploadCloud className="h-8 w-8 text-blue-600" />
                 </div>
-                <div className="mt-4 flex text-sm leading-6 text-slate-600 justify-center items-center">
+                <div className="mt-4 flex text-sm leading-6 text-slate-700/80 justify-center items-center">
                   <label
                     htmlFor="file-upload"
-                    className="relative cursor-pointer rounded-md bg-transparent font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2 hover:text-blue-700 transition-colors"
+                    className="relative cursor-pointer rounded-md bg-transparent font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2 hover:text-blue-600/90 transition-colors"
                   >
                     <span>Select a PDF</span>
                     <input id="file-upload" name="file-upload" type="file" className="sr-only" accept="application/pdf" onChange={handleFileChange} />
                   </label>
                   <p className="pl-1">or drag and drop</p>
                 </div>
-                <p className="text-xs leading-5 text-slate-500 mt-2 font-medium">Only PDF files are supported currently</p>
+                <p className="text-xs leading-5 text-slate-700/60 mt-2 font-medium">Only PDF files are supported currently</p>
               </div>
             </div>
           ) : (
@@ -128,7 +128,7 @@ export default function UploadContract() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-semibold text-slate-900 truncate">{file.name}</h4>
-                  <p className="text-sm text-slate-500 mt-1 font-medium">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <p className="text-sm text-slate-700/60 mt-1 font-medium">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
 
                   {uploadMutation.isPending && (
                     <div className="mt-5">
@@ -147,7 +147,7 @@ export default function UploadContract() {
                       setFile(null);
                       setServerError(null);
                     }}
-                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors outline-none focus:ring-2 focus:ring-rose-500"
+                    className="p-2 text-slate-700/40 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors outline-none focus:ring-2 focus:ring-rose-500"
                     aria-label="Remove file"
                   >
                     <X className="h-5 w-5" />
@@ -168,14 +168,14 @@ export default function UploadContract() {
                     setServerError(null);
                   }}
                   disabled={uploadMutation.isPending}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed outline-none focus:ring-2 focus:ring-slate-300"
+                  className="px-4 py-2 border border-slate-200/80 text-slate-700 rounded-lg hover:bg-slate-50 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed outline-none focus:ring-2 focus:ring-slate-300"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUpload}
                   disabled={uploadMutation.isPending}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors shadow-sm disabled:opacity-75 disabled:cursor-wait flex items-center gap-2 outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-600/90 font-medium text-sm transition-colors shadow-sm disabled:opacity-75 disabled:cursor-wait flex items-center gap-2 outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                 >
                   {uploadMutation.isPending ? (
                     <>

@@ -1,18 +1,35 @@
 "use client";
 
 import { Scale, Copy, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
-import { useState, use } from "react";
+import { useState, use, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { analysisApi } from "@/lib/api/analysis";
+import { useEvidence } from "@/src/contexts/evidence-context";
+import { evidenceFromNegotiation } from "@/src/lib/evidence-mapper";
 
 export default function NegotiationAdvisor({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const evidence = useEvidence();
+  const loadedFor = useRef<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['negotiation', resolvedParams.id],
     queryFn: () => analysisApi.negotiation(resolvedParams.id),
   });
+
+  // Automatic evidence for the Negotiation agent.
+  useEffect(() => {
+    if (!data || loadedFor.current === resolvedParams.id) return;
+    loadedFor.current = resolvedParams.id;
+    const items = evidenceFromNegotiation(data.negotiation_suggestions as unknown as Array<Record<string, unknown>>);
+    if (items.length > 0) {
+      evidence.setSourceType("Negotiation Agent");
+      evidence.setEvidence(items);
+      evidence.setIsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, resolvedParams.id]);
 
   const suggestions = data?.negotiation_suggestions || [];
 
@@ -26,12 +43,12 @@ export default function NegotiationAdvisor({ params }: { params: Promise<{ id: s
     <div className="space-y-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Negotiation Advisor</h2>
-        <p className="text-slate-500 mt-1 font-medium">AI-suggested redlines and alternative wording based on market standards.</p>
+        <p className="text-slate-700/60 mt-1 font-medium">AI-suggested redlines and alternative wording based on market standards.</p>
       </div>
 
       <div className="space-y-6">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-500 bg-white rounded-xl border border-slate-200">
+          <div className="flex flex-col items-center justify-center py-20 text-slate-700/60 bg-white rounded-xl border border-slate-200">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
             <p>Generating negotiation suggestions...</p>
           </div>
@@ -40,7 +57,7 @@ export default function NegotiationAdvisor({ params }: { params: Promise<{ id: s
             Failed to load negotiation suggestions.
           </div>
         ) : suggestions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-500 bg-white rounded-xl border border-slate-200">
+          <div className="flex flex-col items-center justify-center py-20 text-slate-700/60 bg-white rounded-xl border border-slate-200">
             <p>No specific negotiation suggestions identified.</p>
           </div>
         ) : (
@@ -66,18 +83,18 @@ export default function NegotiationAdvisor({ params }: { params: Promise<{ id: s
                     }`}>
                       {priority} Priority
                     </span>
-                    <span className="text-xs font-semibold text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">AI Confidence: {confidence}</span>
+                    <span className="text-xs font-semibold text-slate-700/60 bg-white px-2 py-1 rounded border border-slate-200">AI Confidence: {confidence}</span>
                   </div>
                 </div>
 
                 <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-5">
                     <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Identified Problem</h4>
+                      <h4 className="text-xs font-bold text-slate-700/40 uppercase tracking-widest">Identified Problem</h4>
                       <p className="text-sm text-slate-900 mt-1.5 font-semibold">{problem}</p>
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Business Impact</h4>
+                      <h4 className="text-xs font-bold text-slate-700/40 uppercase tracking-widest">Business Impact</h4>
                       <p className="text-sm text-slate-700 mt-1.5 leading-relaxed">{impact}</p>
                     </div>
                   </div>
@@ -86,7 +103,7 @@ export default function NegotiationAdvisor({ params }: { params: Promise<{ id: s
                     <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-1">
                       Suggested Wording <ChevronRight className="h-3 w-3" />
                     </h4>
-                    <p className="text-sm text-slate-800 leading-relaxed font-serif bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                    <p className="text-sm text-slate-900/90 leading-relaxed font-serif bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                       {wording}
                     </p>
 

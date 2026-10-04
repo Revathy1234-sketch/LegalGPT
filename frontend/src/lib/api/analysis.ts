@@ -109,7 +109,29 @@ export interface KnowledgeGraphResponse {
   };
 }
 
+export interface StoredAgentEntry {
+  has_result: boolean;
+  result: Record<string, unknown> | null;
+  executions: number;
+  executed_at: string | null;
+}
+
+export interface StoredResultsResponse {
+  contract_id: string;
+  file_name: string;
+  uploaded_at: string;
+  summary_text: string | null;
+  risk_score: number | null;
+  results: Record<string, StoredAgentEntry>;
+}
+
 export const analysisApi = {
+  /** Stored (already-executed) agent outputs — no LLM call, no re-run. */
+  getStored: async (contractId: string): Promise<StoredResultsResponse> => {
+    const response = await apiClient.get<StoredResultsResponse>(`/api/v1/analysis/stored/${contractId}`);
+    return response.data;
+  },
+
   summarize: async (contractId: string): Promise<ContractResponse> => {
     const response = await apiClient.post<ContractResponse>(`/api/v1/analysis/summarize/${contractId}`);
     return response.data;

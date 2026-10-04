@@ -38,6 +38,7 @@ from app.schemas.schemas import (
     RiskAnalysisResponse,
 )
 from app.services.agent_logger import log_agent_execution
+from app.services.evidence_grounding import ground_risk_matrix, ground_and_persist
 
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,20 @@ def validate_contract_access(contract: Contract, current_user: User) -> None:
             raise HTTPException(status_code=403, detail='Unauthorized')
     elif contract.uploaded_by != current_user.id:
         raise HTTPException(status_code=403, detail='Unauthorized')
+
+
+def _reset_session(db: Session) -> None:
+    """Discard the request's open transaction before touching the DB again.
+
+    Agent runs take minutes (LLM calls); by the time they return, Neon has
+    often closed our idle-in-transaction connection. Rolling back releases the
+    dead connection so the next statement checks out a fresh, pinged one
+    (pool_pre_ping) instead of raising PendingRollbackError/InterfaceError.
+    """
+    try:
+        db.rollback()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning('Session rollback after agent run failed: %s', exc)
 
 
 def _agent_payload(response: Any) -> Dict[str, Any]:
@@ -125,6 +140,109 @@ def _get_cached_result(db: Session, contract_id: uuid.UUID, task_type: str) -> O
     return None
 
 
+@router.get('/stored/{contract_id}')
+def get_stored_results(
+    contract_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return every previously executed agent result for a contract.
+
+    Used by the Agent Workspace to display stored output instead of
+    re-running agents (no tokens burned, no new execution logged).
+    """
+    from app.models.models import AgentExecutionLog
+
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail='Contract not found')
+    validate_contract_access(contract, current_user)
+    log_endpoint_call('get_stored_results', str(contract_id))
+
+    latest_risk = (
+        db.query(RiskAnalysis)
+        .filter(RiskAnalysis.contract_id == contract_id)
+        .order_by(RiskAnalysis.evaluated_at.desc())
+        .first()
+    )
+
+    # Execution bookkeeping per task type (for "executed at" / counts).
+    logs = (
+        db.query(AgentExecutionLog)
+        .filter(AgentExecutionLog.contract_id == contract_id)
+        .order_by(AgentExecutionLog.created_at.desc())
+        .all()
+    )
+    meta: Dict[str, Dict[str, Any]] = {}
+    for log in logs:
+        entry = meta.setdefault(log.task_type, {'executions': 0, 'executed_at': None})
+        entry['executions'] += 1
+        if entry['executed_at'] is None:
+            entry['executed_at'] = log.created_at.isoformat() if log.created_at else None
+
+    def _meta(task: str) -> Dict[str, Any]:
+        return meta.get(task, {'executions': 0, 'executed_at': None})
+
+    summary_stored = bool(contract.summary and contract.summary != 'No summary generated.')
+    clauses_cached = _get_cached_result(db, contract_id, 'clause_extraction')
+    compliance_cached = _get_cached_result(db, contract_id, 'compliance_check')
+    negotiation_cached = _get_cached_result(db, contract_id, 'negotiation_analysis')
+    kg_cached = _get_cached_result(db, contract_id, 'knowledge_graph')
+
+    results: Dict[str, Any] = {
+        'summary': {
+            'has_result': summary_stored,
+            'result': {'summary': contract.summary} if summary_stored else None,
+            **_meta('summarize'),
+        },
+        'clauses': {
+            'has_result': isinstance(clauses_cached, dict) and bool(clauses_cached.get('clauses')),
+            'result': clauses_cached if isinstance(clauses_cached, dict) and clauses_cached.get('clauses') else None,
+            **_meta('clause_extraction'),
+        },
+        'risk': {
+            'has_result': latest_risk is not None,
+            'result': {
+                'overall_score': latest_risk.overall_score,
+                'risk_matrix': latest_risk.risk_matrix or [],
+                'mitigation_plan': latest_risk.mitigation_plan,
+            } if latest_risk is not None else None,
+            **_meta('risk_analysis'),
+        },
+        'compliance': {
+            'has_result': isinstance(compliance_cached, dict) and ('compliant' in compliance_cached or 'issues' in compliance_cached),
+            'result': compliance_cached if isinstance(compliance_cached, dict) else None,
+            **_meta('compliance_check'),
+        },
+        'negotiation': {
+            'has_result': isinstance(negotiation_cached, dict) and bool(negotiation_cached.get('negotiation_suggestions')),
+            'result': negotiation_cached if isinstance(negotiation_cached, dict) else None,
+            **_meta('negotiation_analysis'),
+        },
+        'knowledge_graph': {
+            'has_result': isinstance(kg_cached, dict) and bool(kg_cached.get('nodes') or kg_cached.get('entities')),
+            'result': {
+                'result': {
+                    'entities': (kg_cached or {}).get('entities', []),
+                    'relationships': (kg_cached or {}).get('relationships', []),
+                    'nodes': (kg_cached or {}).get('nodes', []),
+                    'edges': (kg_cached or {}).get('edges', []),
+                }
+            } if isinstance(kg_cached, dict) and (kg_cached.get('nodes') or kg_cached.get('entities')) else None,
+            **_meta('knowledge_graph'),
+        },
+    }
+
+    return {
+        'contract_id': str(contract.id),
+        'file_name': contract.file_name,
+        'uploaded_at': contract.created_at.isoformat() if contract.created_at else None,
+        'summary_text': contract.summary if summary_stored else None,
+        'risk_score': latest_risk.overall_score if latest_risk is not None else None,
+        'results': results,
+    }
+
+
 @router.post('/summarize/{contract_id}', response_model=ContractResponse)
 def run_summarize(
     contract_id: uuid.UUID,
@@ -138,16 +256,11 @@ def run_summarize(
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_summarize', str(contract_id))
 
-    # Return cached summary but still record telemetry for every API call.
+    # Cached summary: return immediately WITHOUT logging a new execution.
+    # (Agents run exactly once; revisiting views the stored result.)
     if contract.summary and contract.summary != "No summary generated.":
-        start_time = time.perf_counter()
-        end_time = time.perf_counter()
-        _log_execution(
-            db, 'SummaryAgent', str(contract_id), 'summarize',
-            {'success': True, 'result': {'summary': contract.summary, 'cached': True}},
-            start_time, end_time,
-        )
         latest_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).order_by(RiskAnalysis.evaluated_at.desc()).first()
+        ground_and_persist(db, contract_id, latest_risk)
         return {
             "id": contract.id,
             "file_name": contract.file_name,
@@ -163,6 +276,7 @@ def run_summarize(
     start_time = time.perf_counter()
     response = run_summary_agent(str(contract_id))
     end_time = time.perf_counter()
+    _reset_session(db)
     result = _agent_payload(response)
 
     _log_execution(
@@ -176,6 +290,7 @@ def run_summarize(
     
     # Map the DB relationships to the Pydantic schema expected names
     latest_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).order_by(RiskAnalysis.evaluated_at.desc()).first()
+    ground_and_persist(db, contract_id, latest_risk)
     
     # Return as dict to satisfy ContractResponse
     response_data = {
@@ -213,11 +328,13 @@ def run_risk_analysis(
             # We must also return the db_risk schema or at least a RiskAnalysisResponse compatible dict
             db_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).first()
             if db_risk:
+                ground_and_persist(db, contract_id, db_risk)
                 return db_risk
 
     start_time = time.perf_counter()
     response = run_risk_agent(str(contract_id))
     end_time = time.perf_counter()
+    _reset_session(db)
     result = _agent_payload(response)
 
     _log_execution(
@@ -229,6 +346,9 @@ def run_risk_analysis(
     mitigation_plan = result.get('mitigation_plan')
     if not isinstance(mitigation_plan, str):
         mitigation_plan = 'Mitigation suggestions compiled. Refer to negotiation suggestions.'
+
+    # Guarantee verbatim PDF proof for every finding before persisting.
+    risks, _ = ground_risk_matrix(db, contract_id, risks)
 
     db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).delete()
     try:
@@ -271,6 +391,7 @@ def extract_clauses(
     start_time = time.perf_counter()
     response = run_clause_agent(str(contract_id))
     end_time = time.perf_counter()
+    _reset_session(db)
     result = _agent_payload(response)
 
     _log_execution(
@@ -353,6 +474,7 @@ def run_compliance_analysis(
     start_time = time.perf_counter()
     response = run_compliance_agent(str(contract_id))
     end_time = time.perf_counter()
+    _reset_session(db)
     result = _agent_payload(response)
 
     _log_execution(
@@ -434,6 +556,7 @@ def run_negotiation_analysis(
     start_time = time.perf_counter()
     response = run_negotiation_agent(str(contract_id))
     end_time = time.perf_counter()
+    _reset_session(db)
     result = _agent_payload(response)
 
     _log_execution(
@@ -522,12 +645,27 @@ def chat_contract(
     db.commit()
 
     response = run_chat_agent(str(contract_id), payload.question)
-    
+    try:
+        result = _agent_payload(response)
+        answer = str(result.get("answer", ""))
+        metadata = {
+            "citations": result.get("citations", []),
+            "sources": result.get("sources", []),
+            "confidence": result.get("confidence"),
+        }
+    except HTTPException as agent_exc:
+        # Persist a graceful assistant reply so every prompt gets a saved response.
+        answer = (
+            f"The chat agent could not answer this question ({agent_exc.detail}). "
+            "Please try again in a moment."
+        )
+        metadata = {"error": str(agent_exc.detail)}
+
     agent_msg = ChatMessage(
         session_id=session.id, 
         sender_role="assistant", 
-        content=response.get("result", {}).get("answer", ""),
-        metadata_json={"citations": response.get("result", {}).get("citations", [])}
+        content=answer,
+        metadata_json=metadata,
     )
     db.add(agent_msg)
     db.commit()
@@ -583,12 +721,17 @@ def knowledge_graph(
     start_time = time.perf_counter()
     agent_response = run_knowledge_graph_agent(str(contract_id))
     end_time = time.perf_counter()
+    _reset_session(db)
     result_dict = _agent_payload(agent_response)
 
     _log_execution(
         db, 'KnowledgeGraphAgent', str(contract_id), 'knowledge_graph',
         agent_response, start_time, end_time,
     )
+    # Persist the execution log so the result is cached for every future view.
+    # (Without this commit the session rolled back on close and the Knowledge
+    #  Graph agent re-ran from scratch on every page load.)
+    db.commit()
 
     return {
         "success": True,

@@ -5,6 +5,7 @@ import { AlertTriangle, ShieldAlert, Info, Loader2, CheckCircle2 } from "lucide-
 import { useQuery } from "@tanstack/react-query";
 import { analysisApi } from "@/lib/api/analysis";
 import { useEvidence, EvidenceItem } from "@/src/contexts/evidence-context";
+import { riskLevel } from "@/src/lib/risk-utils";
 
 export default function RiskAnalysis({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -18,15 +19,16 @@ export default function RiskAnalysis({ params }: { params: Promise<{ id: string 
 
   const risks = data?.risk_matrix || [];
   const overallScore = data?.overall_score || 0;
-  const isHighRisk = overallScore < -1;
-  const isMediumRisk = overallScore >= -1 && overallScore < 0;
+  const overallLevel = riskLevel(overallScore);
+  const isHighRisk = overallLevel === 'High';
+  const isMediumRisk = overallLevel === 'Medium';
 
   return (
     <div className="space-y-6">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Risk Analysis</h2>
-          <p className="text-slate-500 mt-1 font-medium">AI-driven identification of potential liabilities and exposures.</p>
+          <p className="text-slate-700/60 mt-1 font-medium">AI-driven identification of potential liabilities and exposures.</p>
         </div>
         {!isLoading && !isError && (
           <div className={`px-3 py-2 rounded-lg border flex items-center gap-2 shadow-sm ${
@@ -60,7 +62,7 @@ export default function RiskAnalysis({ params }: { params: Promise<{ id: string 
         <h3 className="text-lg font-bold text-slate-900">Identified Risk Factors</h3>
 
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-500 bg-white rounded-xl border border-slate-200">
+          <div className="flex flex-col items-center justify-center py-12 text-slate-700/60 bg-white rounded-xl border border-slate-200">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
             <p>Analyzing risk factors...</p>
           </div>
@@ -69,22 +71,29 @@ export default function RiskAnalysis({ params }: { params: Promise<{ id: string 
             Failed to load risk analysis.
           </div>
         ) : risks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-500 bg-white rounded-xl border border-slate-200">
+          <div className="flex flex-col items-center justify-center py-12 text-slate-700/60 bg-white rounded-xl border border-slate-200">
             <p>No significant risks identified.</p>
           </div>
         ) : (
           risks.map((risk, idx) => {
-            const severity = risk.severity || risk.risk_level || ((risk.overall_score ?? 0) < -1 ? 'High' : (risk.overall_score ?? 0) < 0 ? 'Medium' : 'Low');
+            const severity = risk.severity || risk.risk_level || riskLevel((risk.overall_score as number) ?? 0);
             return (
               <div 
                 key={idx} 
                 className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col sm:flex-row cursor-pointer hover:border-blue-300 transition-colors"
                 onClick={() => {
+                  const sourceText = String(risk.source_text || risk.evidence || risk.description || risk.issue || "");
                   const ev: EvidenceItem = {
                     id: String(idx),
-                    section: String(risk.issue || risk.title || "Risk Finding"),
-                    text: risk.evidence ? String(risk.evidence) : "Specific contract text not extracted. The model flagged this risk based on the section referenced.",
-                    page: (risk.source || risk.page) ? String(risk.source || risk.page) : "Contract"
+                    agent: "Risk Analysis",
+                    finding: String(risk.issue || risk.title || "Risk Finding"),
+                    severity,
+                    explanation: String(risk.mitigation || risk.impact || "Flagged by the Risk Analysis agent from the PDF."),
+                    page: String(risk.page || risk.clause_reference || "Contract"),
+                    section: String(risk.section || risk.source || risk.category || ""),
+                    sourceText: sourceText || "Specific contract text not extracted. The model flagged this risk based on the section referenced.",
+                    highlight: sourceText ? sourceText.split(/(?<=[.!?])\s/)[0]?.slice(0, 200) || "" : "",
+                    matchScore: (risk.confidence_score as number) ?? undefined,
                   };
                   setEvidence([ev]);
                   setSourceType("Risk Analysis Agent");
@@ -100,20 +109,20 @@ export default function RiskAnalysis({ params }: { params: Promise<{ id: string 
                     {severity === 'High' ? <ShieldAlert className="h-3.5 w-3.5" /> : severity === 'Medium' ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                     {severity} Risk
                   </span>
-                  <span className="text-xs text-slate-500 mt-4 font-medium">Source: <button className="text-blue-600 hover:underline font-semibold">{risk.source || 'General'}</button></span>
+                  <span className="text-xs text-slate-700/60 mt-4 font-medium">Source: <button className="text-blue-600 hover:underline font-semibold">{risk.source || 'General'}</button></span>
                 </div>
                 <div className="p-5 sm:p-6 space-y-4 flex-1">
                   <div>
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Issue</h4>
+                    <h4 className="text-xs font-bold text-slate-700/40 uppercase tracking-widest">Issue</h4>
                     <p className="text-sm text-slate-900 mt-1 font-semibold">{risk.issue || risk.description || risk.title}</p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
                     <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Business Impact</h4>
+                      <h4 className="text-xs font-bold text-slate-700/40 uppercase tracking-widest">Business Impact</h4>
                       <p className="text-sm text-slate-700 mt-1.5 leading-relaxed font-serif">{risk.impact || risk.business_impact || "Potential financial or operational liability."}</p>
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Suggested Mitigation</h4>
+                      <h4 className="text-xs font-bold text-slate-700/40 uppercase tracking-widest">Suggested Mitigation</h4>
                       <p className="text-sm text-slate-700 mt-1.5 leading-relaxed font-serif">{risk.mitigation || risk.suggestion || "Review and negotiate terms."}</p>
                     </div>
                   </div>

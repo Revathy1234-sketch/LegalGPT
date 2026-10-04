@@ -22,18 +22,18 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
     <div className="space-y-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Clause Intelligence</h2>
-        <p className="text-slate-500 mt-1 font-medium">Categorized and analyzed clauses from the document.</p>
+        <p className="text-slate-700/60 mt-1 font-medium">Categorized and analyzed clauses from the document.</p>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <button className="px-3 py-1.5 bg-slate-100 text-slate-900 rounded-md text-sm font-medium">All Clauses</button>
-            <button className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-md text-sm font-medium transition-colors">High Risk</button>
-            <button className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-md text-sm font-medium transition-colors">Non-Standard</button>
+            <button className="px-3 py-1.5 text-slate-700/80 hover:bg-slate-50 rounded-md text-sm font-medium transition-colors">High Risk</button>
+            <button className="px-3 py-1.5 text-slate-700/80 hover:bg-slate-50 rounded-md text-sm font-medium transition-colors">Non-Standard</button>
           </div>
           <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-700/40" />
             <input
               type="text"
               placeholder="Search clauses..."
@@ -44,7 +44,7 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+            <thead className="bg-slate-50 text-slate-700/60 font-medium border-b border-slate-200">
               <tr>
                 <th className="px-6 py-3 font-medium">Clause Name</th>
                 <th className="px-6 py-3 font-medium">Category</th>
@@ -57,7 +57,7 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-700/60">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
                     Analyzing clauses...
                   </td>
@@ -70,7 +70,7 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
                 </tr>
               ) : clauses.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-700/60">
                     No clauses found.
                   </td>
                 </tr>
@@ -80,12 +80,19 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
                     key={idx} 
                     className="hover:bg-slate-50/50 transition-colors cursor-pointer"
                     onClick={() => {
-                      const c = clause as any;
+                      const c = clause as unknown as Record<string, unknown>;
+                      const text = String(c.text || c.content || c.original_text || "Specific contract text not available for this clause.");
                       const ev: EvidenceItem = {
                         id: String(idx),
-                        section: c.title || "Clause Extraction",
-                        text: c.text || c.content || "Specific contract text not available for this clause.",
-                        page: c.page || "Contract"
+                        agent: "Clause Extraction",
+                        finding: String(c.title || c.clause_type || "Clause"),
+                        severity: "Info",
+                        explanation: "Extracted verbatim by the Clause Extraction agent from the uploaded PDF.",
+                        page: String(c.page || "PDF text"),
+                        section: String(c.title || c.category || "Clause"),
+                        sourceText: text,
+                        highlight: text.split(/(?<=[.!?])\s/)[0]?.slice(0, 200) || "",
+                        matchScore: typeof c.confidence_score === "number" ? c.confidence_score : undefined,
                       };
                       setEvidence([ev]);
                       setSourceType("Clause Agent");
@@ -93,7 +100,7 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
                     }}
                   >
                     <td className="px-6 py-4 font-semibold text-slate-900">{clause.title}</td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-700/80">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
                         {clause.category}
                       </span>
@@ -110,10 +117,10 @@ export default function Clauses({ params }: { params: Promise<{ id: string }> })
                         {clause.confidence_score > 0.9 ? 'Low' : clause.confidence_score > 0.7 ? 'Medium' : 'High'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">{(clause.confidence_score * 100).toFixed(0)}%</td>
+                    <td className="px-6 py-4 text-slate-700/80 font-medium">{(clause.confidence_score * 100).toFixed(0)}%</td>
                     <td className="px-6 py-4 text-blue-600 font-medium hover:underline cursor-pointer">View</td>
                     <td className="px-6 py-4 text-right">
-                      <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-200 transition-colors outline-none focus:ring-2 focus:ring-slate-300">
+                      <button className="text-slate-700/40 hover:text-slate-700/80 p-1.5 rounded-md hover:bg-slate-200 transition-colors outline-none focus:ring-2 focus:ring-slate-300">
                         <ChevronDown className="h-4 w-4" />
                       </button>
                     </td>

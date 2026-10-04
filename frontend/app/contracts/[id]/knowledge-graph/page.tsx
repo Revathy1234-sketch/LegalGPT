@@ -1,19 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, use } from "react";
+import { useCallback, useEffect, useRef, use } from "react";
 import ReactFlow, { Background, Controls, Edge, Node, addEdge, Connection, useNodesState, useEdgesState } from "reactflow";
 import "reactflow/dist/style.css";
 import { Network, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { analysisApi } from "@/lib/api/analysis";
+import { useEvidence } from "@/src/contexts/evidence-context";
+import { evidenceFromKnowledgeGraph } from "@/src/lib/evidence-mapper";
 
 export default function KnowledgeGraph({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
+  const evidence = useEvidence();
+  const loadedFor = useRef<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['knowledge-graph', resolvedParams.id],
     queryFn: () => analysisApi.knowledgeGraph(resolvedParams.id),
   });
+
+  // Automatic evidence for the Knowledge Graph agent.
+  useEffect(() => {
+    if (!data?.result?.entities || loadedFor.current === resolvedParams.id) return;
+    loadedFor.current = resolvedParams.id;
+    const items = evidenceFromKnowledgeGraph(data.result.entities as unknown as Array<Record<string, unknown>>);
+    if (items.length > 0) {
+      evidence.setSourceType("Knowledge Graph Agent");
+      evidence.setEvidence(items);
+      evidence.setIsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, resolvedParams.id]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -65,7 +82,7 @@ export default function KnowledgeGraph({ params }: { params: Promise<{ id: strin
     <div className="space-y-6 h-[calc(100vh-140px)] flex flex-col pb-6">
       <div className="mb-2 shrink-0">
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Knowledge Graph</h2>
-        <p className="text-slate-500 mt-1 font-medium">Interactive visualization of contract entities and risk relationships.</p>
+        <p className="text-slate-700/60 mt-1 font-medium">Interactive visualization of contract entities and risk relationships.</p>
       </div>
 
       <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden relative">
@@ -75,7 +92,7 @@ export default function KnowledgeGraph({ params }: { params: Promise<{ id: strin
         </div>
 
         {isLoading ? (
-          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-slate-50">
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-700/60 bg-slate-50">
             <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
             <p className="font-medium">Building Knowledge Graph...</p>
           </div>
@@ -84,7 +101,7 @@ export default function KnowledgeGraph({ params }: { params: Promise<{ id: strin
             <p className="font-medium">Failed to load Knowledge Graph.</p>
           </div>
         ) : nodes.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center text-slate-500 bg-slate-50">
+          <div className="w-full h-full flex items-center justify-center text-slate-700/60 bg-slate-50">
             <p className="font-medium">No entities or relationships found.</p>
           </div>
         ) : (

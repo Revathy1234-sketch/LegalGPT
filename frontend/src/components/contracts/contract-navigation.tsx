@@ -37,7 +37,7 @@ export function ContractNavigation({ contractId }: ContractNavigationProps) {
   return (
     <nav className="p-3 space-y-1">
       <div className="px-3 mb-2">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Analysis Tools</h3>
+        <h3 className="text-xs font-semibold text-slate-700/40 uppercase tracking-wider">Analysis Tools</h3>
       </div>
       {navItems.map((item) => {
         const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
@@ -48,10 +48,10 @@ export function ContractNavigation({ contractId }: ContractNavigationProps) {
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
                 ? "bg-white text-blue-600 shadow-sm border border-slate-200"
-                : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900 border border-transparent"
+                : "text-slate-700/80 hover:bg-slate-200/50 hover:text-slate-900 border border-transparent"
             }`}
           >
-            <item.icon className={`h-4 w-4 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
+            <item.icon className={`h-4 w-4 ${isActive ? "text-blue-600" : "text-slate-700/40"}`} />
             {item.name}
           </Link>
         );

@@ -58,6 +58,110 @@ class HybridRetriever:
         self.keyword_weight = 0.4
         self.min_combined_score = RETRIEVAL_CONFIG["min_combined_score"]
 
+    @staticmethod
+    def _is_browse_query(query: str) -> bool:
+        """Wildcard/empty queries mean "give me the whole document"."""
+        return (query or "").strip().lower() in {"", "*", "**", "all", "document"}
+
+    def _browse_retrieve(
+        self,
+        contract_id: str,
+        top_k: int,
+        retrieval_metadata: Dict[str, Any],
+        total_start: float,
+    ) -> Dict[str, Any]:
+        """Full-document coverage mode.
+
+        Analysis agents (risk, clauses, compliance, negotiation) ask for "*"
+        because they need the whole contract, not a semantic match. Scoring a
+        wildcard like a normal query drops almost everything below the ranking
+        thresholds, leaving agents with a single chunk and empty results.
+        This mode returns parent chunks evenly spread across the document.
+        """
+        from app.core.config import settings
+
+        raw_chunks: List[Dict[str, Any]] = []
+        if self.semantic_retriever and hasattr(self.semantic_retriever, "_load_chunks"):
+            try:
+                raw_chunks = self.semantic_retriever._load_chunks(str(contract_id)) or []
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Browse-mode chunk loading failed: %s", exc)
+                raw_chunks = []
+
+        # Deduplicate children into parents, preserving document order.
+        parents: List[Dict[str, Any]] = []
+        seen: set = set()
+        for chunk in raw_chunks:
+            parent_id = chunk.get("parent_id") or chunk.get("child_id")
+            if parent_id in seen:
+                continue
+            seen.add(parent_id)
+            parents.append(chunk)
+
+        target = max(int(top_k), 12)
+        if len(parents) > target:
+            step = (len(parents) - 1) / max(target - 1, 1)
+            indexes = sorted({round(i * step) for i in range(target)})
+            parents = [parents[i] for i in indexes]
+
+        final_chunks: List[Dict[str, Any]] = []
+        for idx, parent in enumerate(parents):
+            final_chunks.append({
+                "id": parent.get("child_id") or f"browse_{idx}",
+                "child_id": parent.get("child_id"),
+                "parent_id": parent.get("parent_id"),
+                "child_text": parent.get("child_text"),
+                "parent_text": parent.get("parent_text"),
+                "content": parent.get("parent_text") or parent.get("child_text") or "",
+                "metadata": {},
+                "_scoring": {
+                    "semantic_score": 0.0,
+                    "keyword_score": 0.0,
+                    "combined_score": 1.0,
+                },
+                "retrieval_method": "browse",
+            })
+
+        context = self._assemble_context(final_chunks)
+        if len(context) > settings.MAX_SUMMARY_CHARS:
+            context = context[: settings.MAX_SUMMARY_CHARS]
+
+        total_time_ms = int((time.time() - total_start) * 1000)
+        retrieval_metadata.update({
+            "mode": "browse",
+            "total_retrieval_time_ms": total_time_ms,
+            "returned_chunks": len(final_chunks),
+            "parent_ids": [c.get("parent_id") for c in final_chunks],
+        })
+        logger.info(
+            "retrieval pipeline (browse) | contract=%s | parents=%s | ms=%s",
+            contract_id, len(final_chunks), total_time_ms,
+        )
+
+        return {
+            "metadata": retrieval_metadata,
+            "parent_chunks": final_chunks,
+            "child_chunks": final_chunks,
+            "retrieval_time_ms": total_time_ms,
+            "total_chunks": len(final_chunks),
+            "total_chunks_deduplicated": len(final_chunks),
+            "semantic_match_count": 0,
+            "bm25_match_count": 0,
+            "top_retrieval_score": 1.0,
+            "context": context,
+            "chunks": final_chunks,
+            "retrieval_metadata": retrieval_metadata,
+            "sources": [
+                {
+                    "parent_id": c.get("parent_id"),
+                    "child_id": c.get("child_id"),
+                    "score": 1.0,
+                    "section": c.get("metadata", {}).get("section_number"),
+                }
+                for c in final_chunks
+            ],
+        }
+
     def retrieve(
         self,
         query: str,
@@ -89,6 +193,14 @@ class HybridRetriever:
             "contract_id": str(contract_id),
             "requested_top_k": top_k,
         }
+
+        # Wildcard / empty queries are browse requests from analysis agents:
+        # return document-wide coverage instead of scoring a meaningless query.
+        if self._is_browse_query(query):
+            try:
+                return self._browse_retrieve(contract_id, top_k, retrieval_metadata, total_start)
+            except Exception as browse_exc:  # noqa: BLE001
+                logger.error("Browse retrieval failed: %s", browse_exc, exc_info=True)
         
         try:
             # Step 1: Query Expansion

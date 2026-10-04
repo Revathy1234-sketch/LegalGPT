@@ -57,7 +57,7 @@ class LLMService:
             google_api_key=settings.GEMINI_API_KEY,
             temperature=0,
             max_output_tokens=1500,
-            timeout=60,
+            timeout=180,
             max_retries=0,
             model_kwargs=model_kwargs
         )
@@ -78,7 +78,7 @@ class LLMService:
         return OpenAI(
             api_key=settings.OPENROUTER_API_KEY,
             base_url=base_url,
-            timeout=60.0,
+            timeout=180.0,
         )
 
     @staticmethod
@@ -97,7 +97,7 @@ class LLMService:
         return OpenAI(
             api_key=settings.NVIDIA_API_KEY,
             base_url=base_url,
-            timeout=60.0,
+            timeout=180.0,
         )
 
     @staticmethod
@@ -285,7 +285,7 @@ class LLMService:
                     messages=[{"role": "user", "content": rendered_prompt}],
                     temperature=0,
                     max_tokens=4096,
-                    timeout=60,
+                    timeout=180,
                     **kwargs
                 )
                 return cls.unpack_response(response)
@@ -322,7 +322,11 @@ class LLMService:
                 response = client.chat.completions.create(
                     model=settings.OPENROUTER_MODEL,
                     messages=[{"role": "user", "content": cls._render_prompt(prompt, inputs)}],
-                    timeout=60,
+                    temperature=0,
+                    # Without an explicit cap some OpenRouter models truncate
+                    # JSON responses mid-object, breaking agent parsing.
+                    max_tokens=4096,
+                    timeout=180,
                     **kwargs
                 )
                 return cls.unpack_response(response)
