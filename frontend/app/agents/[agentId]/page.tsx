@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { use } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft, Play, Loader2, CheckCircle2, XCircle, Network,
@@ -360,9 +360,10 @@ function AgentResultView({ result }: { result: AgentResult }) {
 
 function AgentDetailContent({ agentId }: { agentId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const evidence = useEvidence();
   const meta = AGENT_META[agentId];
-  const [contractId, setContractId] = useState("");
+  const [contractId, setContractId] = useState(searchParams.get("contractId") || "");
   const [compareId, setCompareId] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -503,7 +504,8 @@ function AgentDetailContent({ agentId }: { agentId: string }) {
 
   // Derived view state — an explicit run wins, otherwise the stored server
   // result (rules 2 & 5: revisits show previous output, never re-run).
-  const storedEntry = agentId !== "compare" && agentId !== "chat" ? stored?.results?.[agentId] : undefined;
+  // IMPORTANT: Ensure stored results belong to the currently active contract to prevent stale UI during loads.
+  const storedEntry = agentId !== "compare" && agentId !== "chat" && stored?.contract_id === activeContractId ? stored?.results?.[agentId] : undefined;
   const hasStored = Boolean(storedEntry?.has_result && storedEntry.result);
   const fromStore = !runMutation.isSuccess && hasStored;
   const result: AgentResult | null = runMutation.isSuccess

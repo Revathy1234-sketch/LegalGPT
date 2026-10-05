@@ -206,7 +206,8 @@ function AgentWorkspaceContent() {
   const stateFor = (id: string): AgentState => {
     const local = states[id];
     if (local?.status === "running" || local?.status === "error") return local;
-    const entry = stored?.results?.[id];
+    // IMPORTANT: Ensure stored results belong to the currently active contract to prevent stale UI during loads.
+    const entry = stored?.contract_id === effectiveContractId ? stored?.results?.[id] : undefined;
     if (entry?.has_result) {
       return { status: "done", preview: previewFromStored(id, entry) || local?.preview || "Stored result ready — open to view." };
     }
@@ -508,7 +509,7 @@ function AgentWorkspaceContent() {
                 onClick={() => {
                   if (state.status === "done") {
                     // Show this agent's stored evidence proof inline first…
-                    const storedEntry = stored?.results?.[agent.id];
+                    const storedEntry = stored?.contract_id === effectiveContractId ? stored?.results?.[agent.id] : undefined;
                     if (storedEntry?.has_result && storedEntry.result) {
                       const items = evidenceFromStored(agent.id, storedEntry);
                       if (items.length > 0) {
@@ -517,7 +518,7 @@ function AgentWorkspaceContent() {
                         evidence.setIsOpen(true);
                       }
                     }
-                    router.push(`/agents/${agent.id}`);
+                    router.push(`/agents/${agent.id}?contractId=${effectiveContractId}`);
                   }
                 }}
                 className={`bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm flex flex-col gap-3 hover:shadow-md transition-all hover:border-slate-300 dark:hover:border-slate-500 group ${state.status === "done" ? "cursor-pointer" : ""}`}
@@ -565,7 +566,7 @@ function AgentWorkspaceContent() {
                             if (evidence.isOpen) {
                               evidence.setIsOpen(false);
                             } else {
-                              const storedEntry = stored?.results?.[agent.id];
+                              const storedEntry = stored?.contract_id === effectiveContractId ? stored?.results?.[agent.id] : undefined;
                               if (storedEntry?.has_result && storedEntry.result) {
                                 const items = evidenceFromStored(agent.id, storedEntry);
                                 if (items.length > 0) {
@@ -581,7 +582,7 @@ function AgentWorkspaceContent() {
                           {evidence.isOpen ? "Hide proof" : "Evidence"}
                         </button>
                         <Link
-                          href={`/agents/${agent.id}`}
+                          href={`/agents/${agent.id}?contractId=${effectiveContractId}`}
                           onClick={(e) => e.stopPropagation()}
                           className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-md border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
                         >
