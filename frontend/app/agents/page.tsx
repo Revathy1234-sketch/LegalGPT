@@ -169,6 +169,13 @@ function AgentWorkspaceContent() {
   const [compareId, setCompareId] = useState<string>("");
   const [states, setStates] = useState<Record<string, { status: "idle" | "running" | "done" | "error"; preview?: string }>>({});
 
+  const urlId = searchParams.get("contractId");
+  useEffect(() => {
+    if (urlId && urlId !== contractId) {
+      setContractId(urlId);
+    }
+  }, [urlId, contractId]);
+
   const { data: contracts, isLoading: loadingContracts } = useQuery({
     queryKey: ["contracts"],
     queryFn: contractsApi.getAll,
