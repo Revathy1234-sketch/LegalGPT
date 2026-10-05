@@ -51,11 +51,13 @@ class SimpleBM25:
                 scores[i] += idf * ((freq * (self.k1 + 1)) / denominator)
         return scores
 
+from cachetools import LRUCache
+
 class VectorService:
     def __init__(self):
         self.model: Optional[Any] = None
         self.model_error: Optional[str] = None
-        self.chunk_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self.chunk_cache = LRUCache(maxsize=10)
 
     def _ensure_model(self) -> bool:
         global SentenceTransformer
@@ -139,14 +141,23 @@ class VectorService:
             db = next(db_generator)
             
         from app.models.models import ContractEmbedding
-        db_embeddings = db.query(ContractEmbedding).filter(ContractEmbedding.contract_id == contract_id).all()
+        db_embeddings = (
+            db.query(
+                ContractEmbedding.chunk_id,
+                ContractEmbedding.parent_id,
+                ContractEmbedding.child_text,
+                ContractEmbedding.parent_text
+            )
+            .filter(ContractEmbedding.contract_id == contract_id)
+            .all()
+        )
         chunks = []
-        for emb in db_embeddings:
+        for chunk_id, parent_id, child_text, parent_text in db_embeddings:
             chunks.append({
-                "child_id": emb.chunk_id,
-                "parent_id": emb.parent_id,
-                "child_text": emb.child_text,
-                "parent_text": emb.parent_text
+                "child_id": chunk_id,
+                "parent_id": parent_id,
+                "child_text": child_text,
+                "parent_text": parent_text
             })
             
         self.chunk_cache[contract_id] = chunks
@@ -198,7 +209,13 @@ class VectorService:
         from app.models.models import ContractEmbedding
         # Inner product via pgvector cosine distance: embedding.cosine_distance(query_embedding)
         results = (
-            db.query(ContractEmbedding, ContractEmbedding.embedding.cosine_distance(query_embedding).label("distance"))
+            db.query(
+                ContractEmbedding.chunk_id,
+                ContractEmbedding.parent_id,
+                ContractEmbedding.child_text,
+                ContractEmbedding.parent_text,
+                ContractEmbedding.embedding.cosine_distance(query_embedding).label("distance")
+            )
             .filter(ContractEmbedding.contract_id == contract_id)
             .order_by("distance")
             .limit(top_k)
@@ -206,12 +223,12 @@ class VectorService:
         )
 
         formatted_results = []
-        for res, distance in results:
+        for chunk_id, parent_id, child_text, parent_text, distance in results:
             formatted_results.append({
-                "child_id": res.chunk_id,
-                "parent_id": res.parent_id,
-                "child_text": res.child_text,
-                "parent_text": res.parent_text,
+                "child_id": chunk_id,
+                "parent_id": parent_id,
+                "child_text": child_text,
+                "parent_text": parent_text,
                 "score": 1.0 - float(distance or 0.0), # Normalize cosine distance to a similarity score
                 "relevance_source": "semantic"
             })

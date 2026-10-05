@@ -197,7 +197,7 @@ function WorkspaceContent() {
         ...prev,
         {
           role: "bot",
-          text: "⚠️ I could not reach the backend. Please ensure the API server is running at http://localhost:8000 and you are signed in.",
+          text: "Unable to complete the request. Please try again.",
           at: new Date().toISOString(),
           error: true,
         },

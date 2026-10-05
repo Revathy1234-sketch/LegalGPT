@@ -439,12 +439,16 @@ class HybridRetriever:
             return {}
         
         try:
+            # Instantiate locally to allow garbage collection of large index data
+            from app.services.bm25_retriever import BM25Retriever
+            bm25_retriever = BM25Retriever()
+            
             # Index chunks if not already indexed
             contents = [c.get("content", "") for c in semantic_chunks]
-            self.bm25_retriever.index(contents)
+            bm25_retriever.index(contents)
             
             # Retrieve using BM25
-            results = self.bm25_retriever.retrieve(query, top_k)
+            results = bm25_retriever.retrieve(query, top_k)
             
             # Convert to dictionary
             scores = {}
@@ -505,14 +509,29 @@ class HybridRetriever:
         if not chunks:
             return ""
         
+        from app.core.config import settings
+        max_chars = getattr(settings, 'MAX_SUMMARY_CHARS', 50000)
+        
         # Combine content with separators
         content_parts = []
+        current_length = 0
+        
         for chunk in chunks:
             content = chunk.get("content", "")
             if content.strip():
+                if current_length + len(content) > max_chars and current_length > 0:
+                    # Skip to next if this chunk blows past the limit (unless it's the first one)
+                    continue
                 content_parts.append(content)
+                current_length += len(content)
+                if current_length > max_chars:
+                    break
         
-        return "\n\n".join(content_parts)
+        result = "\n\n".join(content_parts)
+        if len(result) > max_chars + 2000:
+            result = result[:max_chars + 2000] + "\n...[truncated]"
+            
+        return result
 
     def _log_retrieval_timing(self, metadata: Dict[str, Any]) -> None:
         """Log retrieval timing statistics."""
