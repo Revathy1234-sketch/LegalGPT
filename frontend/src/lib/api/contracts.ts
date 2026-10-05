@@ -32,7 +32,17 @@ export const contractsApi = {
 
     const response = await apiClient.post<ContractResponse>(
       '/api/v1/contracts/upload',
-      formData
+      formData,
+      {
+        transformRequest: [
+          function (data, headers) {
+            // Delete the default application/json header to let the browser automatically
+            // set multipart/form-data with the correct generated boundary.
+            delete headers['Content-Type'];
+            return data;
+          },
+        ],
+      }
     );
     return response.data;
   },
