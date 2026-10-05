@@ -1,6 +1,9 @@
 import os
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"))
 
 
 class Settings(BaseSettings):
