@@ -7,8 +7,8 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // Long timeout for AI agents (compliance/negotiation/KG can take 60-90s)
-  timeout: 120000,
+  // Long timeout for AI agents (compliance/negotiation/KG can take 60-90s+)
+  timeout: 300000,
 });
 
 // Add a request interceptor to inject the token

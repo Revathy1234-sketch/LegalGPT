@@ -79,6 +79,8 @@ def _agent_payload(response: Any) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=detail)
 
     result = getattr(response, 'result', None)
+    if hasattr(result, 'model_dump'):
+        return result.model_dump(mode='json')
     if not isinstance(result, dict):
         raise HTTPException(status_code=500, detail='Enterprise agent returned an invalid result')
     return result
