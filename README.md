@@ -1,4 +1,4 @@
-# LegalGPT Enterprise
+# LegalGPT
 
 > Production-oriented contract intelligence API powered by FastAPI, PostgreSQL, retrieval-augmented generation, and specialized legal AI agents.
 
