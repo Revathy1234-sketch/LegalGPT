@@ -30,11 +30,10 @@ export const contractsApi = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await apiClient.post<ContractResponse>('/api/v1/contracts/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await apiClient.post<ContractResponse>(
+      '/api/v1/contracts/upload',
+      formData
+    );
     return response.data;
   },
 
