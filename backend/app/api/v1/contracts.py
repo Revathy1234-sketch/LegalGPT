@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, BackgroundTasks
 from app.services.langchain_rag_service import langchain_rag_service
 import logging
 logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.api.v1.auth import get_current_user
 from app.models.models import User, Contract
 from app.schemas.schemas import (
@@ -55,42 +55,14 @@ async def read_validated_pdf(file: UploadFile) -> bytes:
     return content
 
 
-@router.post("/upload", response_model=ContractResponse, status_code=status.HTTP_201_CREATED)
-async def upload_contract(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    content = await read_validated_pdf(file)
-
-    # Ensure upload folder exists
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-
-    # Generate unique filename
-    contract_id = uuid.uuid4()
-    file_extension = os.path.splitext(file.filename)[1]
-    saved_filename = f"{contract_id}{file_extension}"
-    file_path = os.path.join(settings.UPLOAD_DIR, saved_filename)
-
-    # Save PDF
-    with open(file_path, "wb") as f:
-        f.write(content)
-
-    # Create database record
-    db_contract = Contract(
-        id=contract_id,
-        uploaded_by=current_user.id,
-        file_name=file.filename,
-        storage_url=file_path,
-        status="Processing"
-    )
-
-    db.add(db_contract)
-    db.commit()
-    db.refresh(db_contract)
-
-    # Process file
+def process_contract_background(contract_id: str, file_path: str):
+    db = SessionLocal()
     try:
+        db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not db_contract:
+            logger.error(f"Background task failed: Contract {contract_id} not found in DB")
+            return
+
         # Extract text
         full_text = DocumentParser.extract_text_from_pdf(file_path)
 
@@ -142,7 +114,7 @@ DOCUMENT:
                 summary = "No summary generated."
             logger.info("Summary generated successfully")
         except Exception as summary_error:
-            logger.error("\n========== SUMMARY GENERATION ERROR ==========\n" + str(summary_error) + "\n==================================\n")
+            logger.error("\\n========== SUMMARY GENERATION ERROR ==========\\n" + str(summary_error) + "\\n==================================\\n")
             summary = f"Summary generation failed: {str(summary_error)}"
 
         # Update database
@@ -162,18 +134,55 @@ DOCUMENT:
 
     except Exception as e:
         try:
-            db.rollback()  # Reset any poisoned transaction state before attempting the error commit
-            db_contract.status = "Error"
-            db_contract.summary = f"Error processing contract: {str(e)}"
-            db.commit()
-            db.refresh(db_contract)
+            db.rollback()
+            db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+            if db_contract:
+                db_contract.status = "Error"
+                db_contract.summary = f"Error processing contract: {str(e)}"
+                db.commit()
         except Exception as commit_err:
             logger.error("Failed to persist contract error state: %s", commit_err)
+    finally:
+        db.close()
 
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process contract: {str(e)}"
-        )
+
+@router.post("/upload", response_model=ContractResponse, status_code=status.HTTP_201_CREATED)
+async def upload_contract(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    content = await read_validated_pdf(file)
+
+    # Ensure upload folder exists
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+    # Generate unique filename
+    contract_id = uuid.uuid4()
+    file_extension = os.path.splitext(file.filename)[1]
+    saved_filename = f"{contract_id}{file_extension}"
+    file_path = os.path.join(settings.UPLOAD_DIR, saved_filename)
+
+    # Save PDF
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Create database record
+    db_contract = Contract(
+        id=contract_id,
+        uploaded_by=current_user.id,
+        file_name=file.filename,
+        storage_url=file_path,
+        status="Processing"
+    )
+
+    db.add(db_contract)
+    db.commit()
+    db.refresh(db_contract)
+
+    # Queue background processing
+    background_tasks.add_task(process_contract_background, str(contract_id), file_path)
 
     return db_contract
 

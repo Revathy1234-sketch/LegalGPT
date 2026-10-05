@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { contractsApi } from "@/src/lib/api/contracts";
 
+import { toast } from "react-hot-toast";
+
 export default function UploadContract() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -16,11 +18,20 @@ export default function UploadContract() {
   const uploadMutation = useMutation({
     mutationFn: (file: File) => contractsApi.upload(file),
     onSuccess: (data) => {
+      toast.success("Contract uploaded successfully!");
       router.push(`/contracts/${data.id}`);
     },
-    onError: (error: { response?: { data?: { detail?: string } } } | Error | unknown) => {
-      const err = error as { response?: { data?: { detail?: string } } };
-      setServerError(err.response?.data?.detail || "An error occurred during upload.");
+    onError: (error: any) => {
+      let errorMessage = "An error occurred during upload.";
+      const detail = error?.response?.data?.detail;
+      
+      if (typeof detail === 'string') {
+        errorMessage = detail;
+      } else if (Array.isArray(detail)) {
+        errorMessage = detail.map((d: any) => d.msg).join(', ');
+      }
+      
+      setServerError(errorMessage);
     }
   });
 

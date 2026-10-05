@@ -40,7 +40,7 @@ class DocumentParser:
         return False
 
     @staticmethod
-    def get_parent_child_chunks(text: str, parent_size: int = 1800, child_size: int = 400) -> List[Dict[str, Any]]:
+    def get_parent_child_chunks(text: str, parent_size: int = 2500, child_size: int = 800) -> List[Dict[str, Any]]:
         """
         Splits text into chunks. Each parent chunk contains multiple child chunks.
         """
