@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -47,15 +47,15 @@ const AGENTS: {
   icon: typeof FileText;
   color: string;
 }[] = [
-  { id: "summary", name: "Executive Summary", statusName: "Summary", description: "Condenses the whole PDF into a board-ready brief.", icon: FileText, color: "text-blue-600 bg-blue-50 border-blue-100" },
-  { id: "clauses", name: "Clause Extraction", statusName: "Clauses", description: "Pulls every clause verbatim with confidence scores.", icon: List, color: "text-indigo-600 bg-indigo-50 border-indigo-100" },
-  { id: "risk", name: "Risk Analysis", statusName: "Risk", description: "Scores the contract 0–100 and cites each risk in the PDF.", icon: BarChart3, color: "text-rose-600 bg-rose-50 border-rose-100" },
-  { id: "compliance", name: "Compliance Agent", statusName: "Compliance", description: "Checks clauses against regulatory frameworks.", icon: ShieldCheck, color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-  { id: "negotiation", name: "Negotiation Agent", statusName: "Negotiation", description: "Proposes redlines with priority and rationale.", icon: Scale, color: "text-amber-600 bg-amber-50 border-amber-100" },
-  { id: "knowledge_graph", name: "Knowledge Graph", statusName: "Knowledge Graph", description: "Builds parties, obligations and clause relationships.", icon: Network, color: "text-purple-600 bg-purple-50 border-purple-100" },
-  { id: "chat", name: "Contract Chat (RAG)", statusName: "Chat", description: "Answers questions grounded in retrieved PDF passages.", icon: MessageSquare, color: "text-sky-600 bg-sky-50 border-sky-100" },
-  { id: "compare", name: "Comparison Agent", statusName: "Comparison", description: "Compares two contracts for gaps and differences.", icon: GitCompare, color: "text-slate-700 dark:text-slate-200/80 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700" },
-];
+    { id: "summary", name: "Executive Summary", statusName: "Summary", description: "Condenses the whole PDF into a board-ready brief.", icon: FileText, color: "text-blue-600 bg-blue-50 border-blue-100" },
+    { id: "clauses", name: "Clause Extraction", statusName: "Clauses", description: "Pulls every clause verbatim with confidence scores.", icon: List, color: "text-indigo-600 bg-indigo-50 border-indigo-100" },
+    { id: "risk", name: "Risk Analysis", statusName: "Risk", description: "Scores the contract 0–100 and cites each risk in the PDF.", icon: BarChart3, color: "text-rose-600 bg-rose-50 border-rose-100" },
+    { id: "compliance", name: "Compliance Agent", statusName: "Compliance", description: "Checks clauses against regulatory frameworks.", icon: ShieldCheck, color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
+    { id: "negotiation", name: "Negotiation Agent", statusName: "Negotiation", description: "Proposes redlines with priority and rationale.", icon: Scale, color: "text-amber-600 bg-amber-50 border-amber-100" },
+    { id: "knowledge_graph", name: "Knowledge Graph", statusName: "Knowledge Graph", description: "Builds parties, obligations and clause relationships.", icon: Network, color: "text-purple-600 bg-purple-50 border-purple-100" },
+    { id: "chat", name: "Contract Chat (RAG)", statusName: "Chat", description: "Answers questions grounded in retrieved PDF passages.", icon: MessageSquare, color: "text-sky-600 bg-sky-50 border-sky-100" },
+    { id: "compare", name: "Comparison Agent", statusName: "Comparison", description: "Compares two contracts for gaps and differences.", icon: GitCompare, color: "text-slate-700 dark:text-slate-200/80 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700" },
+  ];
 
 function AgentsEvidenceWrapper() {
   const { isOpen } = useEvidence();
@@ -682,7 +682,15 @@ export default function AgentWorkspacePage() {
   return (
     <EvidenceProvider>
       <AppShell>
-        <AgentWorkspaceContent />
+        <Suspense
+          fallback={
+            <div className="flex h-full w-full items-center justify-center text-slate-500">
+              Loading Agent Workspace...
+            </div>
+          }
+        >
+          <AgentWorkspaceContent />
+        </Suspense>
       </AppShell>
     </EvidenceProvider>
   );

@@ -9,7 +9,7 @@ import { useEvidence } from "@/src/contexts/evidence-context";
 import { formatISTShort } from "@/src/lib/date-utils";
 import { evidenceFromChatSources } from "@/src/lib/evidence-mapper";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "production" ? "https://legalgpt-backend.fastapicloud.dev" : "http://localhost:8000");
 
 interface Message {
   role: "user" | "bot";

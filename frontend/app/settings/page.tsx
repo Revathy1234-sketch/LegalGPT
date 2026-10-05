@@ -110,7 +110,7 @@ export default function Settings() {
                       <div className="flex items-center gap-5">
                         <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-sm border-2 border-white ring-2 ring-slate-100 overflow-hidden relative group">
                           {user?.avatar_url ? (
-                             <img src={`http://localhost:8000${user.avatar_url}`} alt="Avatar" className="w-full h-full object-cover" />
+                             <img src={`${process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "production" ? "https://legalgpt-backend.fastapicloud.dev" : "http://localhost:8000")}${user.avatar_url}`} alt="Avatar" className="w-full h-full object-cover" />
                           ) : (
                              <span>{firstName?.[0] || 'U'}</span>
                           )}

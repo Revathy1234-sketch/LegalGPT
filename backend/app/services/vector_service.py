@@ -4,6 +4,7 @@ import re
 import math
 import logging
 from typing import List, Dict, Any, Optional
+import threading
 
 try:
     import numpy as np
@@ -58,30 +59,40 @@ class VectorService:
         self.model: Optional[Any] = None
         self.model_error: Optional[str] = None
         self.chunk_cache = LRUCache(maxsize=10)
+        self._lock = threading.Lock()
 
     def _ensure_model(self) -> bool:
-        global SentenceTransformer
         if self.model is not None:
             return True
-        if SentenceTransformer is None:
+            
+        with self._lock:
+            # Double-checked locking
+            if self.model is not None:
+                return True
+                
+            global SentenceTransformer
+            if SentenceTransformer is None:
+                try:
+                    from sentence_transformers import SentenceTransformer as _SentenceTransformer
+                    import torch
+                    # Restrict PyTorch thread usage to save memory
+                    torch.set_num_threads(1)
+                    SentenceTransformer = _SentenceTransformer
+                except Exception as exc:
+                    self.model_error = f"Sentence transformers is unavailable. Error: {exc}"
+                    logger.error("Failed to lazily import SentenceTransformer: %s", exc)
+                    return False
+
+            logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
             try:
-                from sentence_transformers import SentenceTransformer as _SentenceTransformer
-                SentenceTransformer = _SentenceTransformer
+                self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
             except Exception as exc:
-                self.model_error = f"Sentence transformers is unavailable. Error: {exc}"
-                logger.error("Failed to lazily import SentenceTransformer: %s", exc)
+                self.model_error = str(exc)
+                logger.error("Failed to load embedding model: %s", exc)
                 return False
 
-        logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
-        try:
-            self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
-        except Exception as exc:
-            self.model_error = str(exc)
-            logger.error("Failed to load embedding model: %s", exc)
-            return False
-
-        logger.info("Embedding model loaded")
-        return True
+            logger.info("Embedding model loaded")
+            return True
 
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         if not scores:

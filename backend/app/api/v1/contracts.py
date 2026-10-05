@@ -84,17 +84,13 @@ def process_contract_background(contract_id: str, file_path: str):
         logger.info(f"Document length: {len(full_text)}")
         logger.info(f"Total chunks: {len(chunks)}")
 
-        # Create embeddings + FAISS index
-        try:
-            vector_service.index_contract_chunks(
-                str(contract_id),
-                chunks,
-                db=db
-            )
-            logger.info(f"✅ Indexed {len(chunks)} chunks")
-
-        except Exception as embedding_error:
-            logger.warning(f"⚠️ Embedding Error: {embedding_error}")
+        # Create embeddings + FAISS index (using pgvector)
+        vector_service.index_contract_chunks(
+            str(contract_id),
+            chunks,
+            db=db
+        )
+        logger.info(f"✅ Indexed {len(chunks)} chunks")
 
         # Generate contract summary
         summary = "No primary or fallback LLM providers configured."
