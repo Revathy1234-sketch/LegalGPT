@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles, FileText, List, ShieldCheck, Scale, Network, GitCompare,
   MessageSquare, Loader2, Play, CheckCircle2, XCircle, ChevronDown, BarChart3,
@@ -163,8 +163,9 @@ function evidenceFromStored(agentId: string, entry: { result: Record<string, unk
 function AgentWorkspaceContent() {
   const evidence = useEvidence();
   const router = useRouter();
+  const searchParams = useSearchParams();
   // Empty state falls back to the user's contracts (derived, no setState effects).
-  const [contractId, setContractId] = useState<string>("");
+  const [contractId, setContractId] = useState<string>(searchParams.get("contractId") || "");
   const [compareId, setCompareId] = useState<string>("");
   const [states, setStates] = useState<Record<string, { status: "idle" | "running" | "done" | "error"; preview?: string }>>({});
 
@@ -180,7 +181,8 @@ function AgentWorkspaceContent() {
   useEffect(() => {
     setStates({});
     evidence.setIsOpen(false);
-  }, [effectiveContractId, evidence]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveContractId]);
 
   // STORED agent results — served by GET /analysis/stored/{id} (no LLM calls).
   // This is what makes "run once, view forever" work across page reloads.

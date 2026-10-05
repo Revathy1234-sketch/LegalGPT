@@ -547,7 +547,7 @@ function AgentDetailContent({ agentId }: { agentId: string }) {
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => router.push("/agents")}
+          onClick={() => router.push(`/agents?contractId=${activeContractId}`)}
           className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-700/60"
         >
           <ArrowLeft className="h-5 w-5" />
