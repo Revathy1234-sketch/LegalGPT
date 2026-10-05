@@ -23,6 +23,7 @@ interface Props {
   contractTypes?: { type: string; count: number }[];
   riskRadar?: { category: string; score: number }[];
   agentUsage?: { name: string; count: number }[];
+  defaultChartType?: ChartType;
 }
 
 type ChartType = "donut" | "bar" | "area" | "treemap" | "radar" | "breakdown" | "stacked" | "histogram";
@@ -80,9 +81,10 @@ export function RiskDistributionChart({
   contractTypes,
   riskRadar,
   agentUsage,
+  defaultChartType = "donut",
 }: Props) {
   const evidenceContext = useContext(EvidenceContext);
-  const [chartType, setChartType] = useState<ChartType>("donut");
+  const [chartType, setChartType] = useState<ChartType>(defaultChartType);
   const [open, setOpen] = useState(false);
 
   const total = (data || []).reduce((sum, slice) => sum + (slice.value || 0), 0);

@@ -176,6 +176,12 @@ function AgentWorkspaceContent() {
   const effectiveContractId = contractId || contracts?.[0]?.id || "";
   const effectiveCompareId = compareId || contracts?.find((c) => c.id !== effectiveContractId)?.id || "";
 
+  // Reset local states and evidence when switching contracts
+  useEffect(() => {
+    setStates({});
+    evidence.setIsOpen(false);
+  }, [effectiveContractId, evidence]);
+
   // STORED agent results — served by GET /analysis/stored/{id} (no LLM calls).
   // This is what makes "run once, view forever" work across page reloads.
   const { data: stored } = useQuery<StoredResultsResponse>({

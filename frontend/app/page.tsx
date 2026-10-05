@@ -89,6 +89,9 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <RiskDistributionChart
+                    title="Contracts Overview"
+                    subtitle="Status of all your uploaded contracts."
+                    defaultChartType="breakdown"
                     data={data.risk_distribution}
                     height={420}
                     statusDistribution={data.status_distribution}
