@@ -227,8 +227,6 @@ def get_stored_results(
                 'result': {
                     'entities': (kg_cached or {}).get('entities', []),
                     'relationships': (kg_cached or {}).get('relationships', []),
-                    'nodes': (kg_cached or {}).get('nodes', []),
-                    'edges': (kg_cached or {}).get('edges', []),
                 }
             } if isinstance(kg_cached, dict) and (kg_cached.get('nodes') or kg_cached.get('entities')) else None,
             **_meta('knowledge_graph'),
@@ -738,7 +736,7 @@ def knowledge_graph(
     return {
         "success": True,
         "result": {
-            "entities": result_dict.get("nodes", []),
-            "relationships": result_dict.get("edges", [])
+            "entities": result_dict.get("entities", []),
+            "relationships": result_dict.get("relationships", [])
         }
     }

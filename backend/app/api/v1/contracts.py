@@ -97,34 +97,39 @@ def process_contract_background(contract_id: str, file_path: str):
         )
         logger.info(f"✅ Indexed {len(chunks)} chunks")
 
-        # Generate contract summary
-        summary = "No primary or fallback LLM providers configured."
-
-        try:
-            logger.info("summary generation started")
-            prompt = f"""
-Summarize the following document in a professional executive summary.
-
-DOCUMENT:
-
-{full_text[:settings.MAX_SUMMARY_CHARS]}
-"""
-            from app.services.llm_service import LLMService
-            summary, _ = LLMService.invoke(prompt, {})
-            if not summary or not summary.strip():
-                summary = "No summary generated."
-            logger.info("summary generation completed")
-        except Exception as summary_error:
-            logger.error("\\n========== SUMMARY GENERATION ERROR ==========\\n" + str(summary_error) + "\\n==================================\\n")
-            summary = f"Summary generation failed: {str(summary_error)}"
-
-        # Update database
-        logger.info("final Processed status")
-        db_contract.summary = summary
+        # Update database to Processed before summary so overview is available immediately
+        logger.info("setting Processed status before summary generation")
         db_contract.status = "Processed"
-
         db.commit()
         db.refresh(db_contract)
+
+        # Run core agents in background to populate Overview automatically
+        logger.info("Running core agents in background")
+        from app.api.v1.analysis import run_summarize, knowledge_graph, extract_clauses, run_risk_analysis
+        
+        uploader = db.query(User).filter(User.id == db_contract.uploaded_by).first()
+        contract_uuid = uuid.UUID(contract_id)
+        
+        try:
+            logger.info("summary generation started via API")
+            run_summarize(contract_id=contract_uuid, db=db, current_user=uploader)
+        except Exception as e:
+            logger.error(f"Background summary agent error: {e}")
+            
+        try:
+            knowledge_graph(contract_id=contract_uuid, force=True, db=db, current_user=uploader)
+        except Exception as e:
+            logger.error(f"Background KG agent error: {e}")
+            
+        try:
+            extract_clauses(contract_id=contract_uuid, force=True, db=db, current_user=uploader)
+        except Exception as e:
+            logger.error(f"Background clause agent error: {e}")
+            
+        try:
+            run_risk_analysis(contract_id=contract_uuid, force=True, db=db, current_user=uploader)
+        except Exception as e:
+            logger.error(f"Background risk agent error: {e}")
 
         # Cleanup local PDF file to save space
         try:

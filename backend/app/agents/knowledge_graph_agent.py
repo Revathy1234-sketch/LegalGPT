@@ -141,8 +141,8 @@ def run_knowledge_graph_agent(
                     entity["confidence_score"] = 0.85
 
         nodes, edges = convert_to_react_flow(parsed["entities"], parsed["relationships"])
-        parsed["nodes"] = nodes
-        parsed["edges"] = edges
+        parsed["entities"] = nodes
+        parsed["relationships"] = edges
         parsed["statistics"] = {
             "entity_count": len(parsed["entities"]),
             "relationship_count": len(parsed["relationships"]),

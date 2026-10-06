@@ -351,17 +351,17 @@ class LLMService:
 
     @classmethod
     def invoke(cls, prompt: Any, inputs: Dict[str, Any], require_json: bool = False) -> Tuple[str, Dict[str, int]]:
-        """Invoke the LLM provider hierarchy: NVIDIA -> OpenRouter -> Gemini."""
+        """Invoke the LLM provider hierarchy: Gemini -> OpenRouter -> NVIDIA."""
         _invoke_start = time.time()
-        provider_used = "nvidia"
+        provider_used = "gemini"
         fallback_used = False
         try:
-            logger.info("[LLM] Invoking primary provider: NVIDIA")
-            result = cls._invoke_nvidia(prompt, inputs, require_json=require_json)
-        except Exception as nvidia_exc:
-            if not cls._is_fallback_error(nvidia_exc):
+            logger.info("[LLM] Invoking primary provider: Gemini")
+            result = cls._invoke_gemini(prompt, inputs, require_json=require_json)
+        except Exception as gemini_exc:
+            if not cls._is_fallback_error(gemini_exc):
                 raise
-            logger.warning("[LLM] NVIDIA invocation failed: %s. Activating OpenRouter fallback...", nvidia_exc)
+            logger.warning("[LLM] Gemini invocation failed: %s. Activating OpenRouter fallback...", gemini_exc)
             provider_used = "openrouter"
             fallback_used = True
             try:
@@ -369,20 +369,20 @@ class LLMService:
             except Exception as open_exc:
                 if not cls._is_fallback_error(open_exc):
                     raise
-                logger.warning("[LLM] OpenRouter invocation failed: %s. Activating Gemini fallback...", open_exc)
-                provider_used = "gemini"
+                logger.warning("[LLM] OpenRouter invocation failed: %s. Activating NVIDIA fallback...", open_exc)
+                provider_used = "nvidia"
                 fallback_used = True
                 try:
-                    result = cls._invoke_gemini(prompt, inputs, require_json=require_json)
-                except Exception as gemini_exc:
+                    result = cls._invoke_nvidia(prompt, inputs, require_json=require_json)
+                except Exception as nvidia_exc:
                     elapsed_ms = int((time.time() - _invoke_start) * 1000)
                     logger.error(
-                        "[LLM] Gemini fallback also failed | provider=%s | fallback=%s | time_ms=%d | error=%s",
-                        provider_used, fallback_used, elapsed_ms, gemini_exc,
+                        "[LLM] NVIDIA fallback also failed | provider=%s | fallback=%s | time_ms=%d | error=%s",
+                        provider_used, fallback_used, elapsed_ms, nvidia_exc,
                     )
                     raise LLMProviderException(
                         "The primary and all fallback LLM services are currently unavailable."
-                    ) from gemini_exc
+                    ) from nvidia_exc
 
         elapsed_ms = int((time.time() - _invoke_start) * 1000)
         token_usage = result[1] if isinstance(result, tuple) and len(result) > 1 else {}

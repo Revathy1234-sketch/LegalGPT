@@ -91,8 +91,13 @@ def run_negotiation_agent(
         parsed["priority_actions"] = []
 
     if isinstance(parsed["negotiation_suggestions"], str):
-        parsed["negotiation_suggestions"] = [parsed["negotiation_suggestions"]] if parsed["negotiation_suggestions"].strip() else []
-    elif not isinstance(parsed["negotiation_suggestions"], list):
+        parsed["negotiation_suggestions"] = [{"suggestion": parsed["negotiation_suggestions"]}] if parsed["negotiation_suggestions"].strip() else []
+    elif isinstance(parsed["negotiation_suggestions"], list):
+        parsed["negotiation_suggestions"] = [
+            {"suggestion": item} if isinstance(item, str) else item
+            for item in parsed["negotiation_suggestions"]
+        ]
+    else:
         parsed["negotiation_suggestions"] = []
 
     if isinstance(parsed["priority_actions"], str):
