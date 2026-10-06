@@ -176,12 +176,7 @@ function AgentWorkspaceContent() {
     }
   }, [urlId]);
 
-  const { data: statusData } = useQuery({
-    queryKey: ["contract_status", effectiveContractId],
-    queryFn: () => contractsApi.getStatus(effectiveContractId),
-    enabled: Boolean(effectiveContractId),
-    refetchInterval: (query) => (query?.state?.data?.processing ? 3000 : false),
-  });
+
 
   const { data: contracts, isLoading: loadingContracts } = useQuery({
     queryKey: ["contracts"],
@@ -190,6 +185,13 @@ function AgentWorkspaceContent() {
 
   const effectiveContractId = contractId || contracts?.[0]?.id || "";
   const effectiveCompareId = compareId || contracts?.find((c) => c.id !== effectiveContractId)?.id || "";
+
+  const { data: statusData } = useQuery({
+    queryKey: ["contract_status", effectiveContractId],
+    queryFn: () => contractsApi.getStatus(effectiveContractId),
+    enabled: Boolean(effectiveContractId),
+    refetchInterval: (query) => (query?.state?.data?.processing ? 3000 : false),
+  });
 
   // Reset local states and evidence when switching contracts
   useEffect(() => {
