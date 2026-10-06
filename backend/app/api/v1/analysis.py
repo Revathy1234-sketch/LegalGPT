@@ -387,6 +387,21 @@ def extract_clauses(
         cached = _get_cached_result(db, contract_id, 'clause_extraction')
         if cached:
             return {'clauses': cached.get('clauses', [])}
+            
+        import datetime
+        from datetime import timezone
+        
+        now = datetime.datetime.now(timezone.utc)
+        if contract.created_at.tzinfo is None:
+            contract_time = contract.created_at.replace(tzinfo=timezone.utc)
+        else:
+            contract_time = contract.created_at
+            
+        if (now - contract_time).total_seconds() < 300:
+            raise HTTPException(
+                status_code=409, 
+                detail="Clause extraction is still processing in the background. Please wait a moment for it to complete."
+            )
 
     start_time = time.perf_counter()
     response = run_clause_agent(str(contract_id))
@@ -713,10 +728,25 @@ def knowledge_graph(
             return {
                 "success": True,
                 "result": {
-                    "entities": cached.get("nodes", []),
-                    "relationships": cached.get("edges", [])
+                    "entities": cached.get("entities", []),
+                    "relationships": cached.get("relationships", [])
                 }
             }
+            
+        import datetime
+        from datetime import timezone
+        
+        now = datetime.datetime.now(timezone.utc)
+        if contract.created_at.tzinfo is None:
+            contract_time = contract.created_at.replace(tzinfo=timezone.utc)
+        else:
+            contract_time = contract.created_at
+            
+        if (now - contract_time).total_seconds() < 300:
+            raise HTTPException(
+                status_code=409, 
+                detail="Knowledge Graph is still processing in the background. Please wait a moment for it to complete."
+            )
 
     start_time = time.perf_counter()
     agent_response = run_knowledge_graph_agent(str(contract_id))

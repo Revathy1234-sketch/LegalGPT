@@ -16,8 +16,25 @@ export default function UploadContract() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => contractsApi.upload(file),
+    mutationFn: async (file: File) => {
+      const data = await contractsApi.upload(file);
+      // Wait until chunking/indexing is done and agents are ready
+      let contract = data;
+      while (contract.status.toLowerCase() === "processing" || contract.status.toLowerCase() === "pending") {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          contract = await contractsApi.getById(contract.id);
+        } catch (e) {
+          // If it fails to fetch, keep waiting
+        }
+      }
+      return contract;
+    },
     onSuccess: (data) => {
+      if (data.status.toLowerCase() === "error") {
+        setServerError("Failed to process the contract. Please try again.");
+        return;
+      }
       toast.success("Contract uploaded successfully!");
       router.push(`/contracts/${data.id}`);
     },
