@@ -57,6 +57,7 @@ async def read_validated_pdf(file: UploadFile) -> bytes:
 
 def process_contract_background(contract_id: str, file_path: str):
     db = SessionLocal()
+    logger.info(f"background task started for {contract_id}")
     try:
         db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
         if not db_contract:
@@ -64,13 +65,17 @@ def process_contract_background(contract_id: str, file_path: str):
             return
 
         # Extract text
+        logger.info("text extraction started")
         full_text = DocumentParser.extract_text_from_pdf(file_path)
+        logger.info("text extraction completed")
 
         if not full_text or not full_text.strip():
             raise ValueError("Failed to extract any text from the PDF.")
 
         # Create chunks
+        logger.info("chunking started")
         chunks = DocumentParser.get_parent_child_chunks(full_text)
+        logger.info("chunking completed")
 
         if not chunks:
             raise ValueError("No chunks were generated from the contract text.")
@@ -96,7 +101,7 @@ def process_contract_background(contract_id: str, file_path: str):
         summary = "No primary or fallback LLM providers configured."
 
         try:
-            logger.info("Generating contract summary via LLMService...")
+            logger.info("summary generation started")
             prompt = f"""
 Summarize the following document in a professional executive summary.
 
@@ -108,12 +113,13 @@ DOCUMENT:
             summary, _ = LLMService.invoke(prompt, {})
             if not summary or not summary.strip():
                 summary = "No summary generated."
-            logger.info("Summary generated successfully")
+            logger.info("summary generation completed")
         except Exception as summary_error:
             logger.error("\\n========== SUMMARY GENERATION ERROR ==========\\n" + str(summary_error) + "\\n==================================\\n")
             summary = f"Summary generation failed: {str(summary_error)}"
 
         # Update database
+        logger.info("final Processed status")
         db_contract.summary = summary
         db_contract.status = "Processed"
 
@@ -128,7 +134,11 @@ DOCUMENT:
         except Exception as cleanup_err:
             logger.warning(f"Failed to cleanup PDF file {file_path}: {cleanup_err}")
 
+        logger.info(f"background task completed for {contract_id}")
+
     except Exception as e:
+        import traceback
+        logger.error(f"background task exception with full traceback: {traceback.format_exc()}")
         try:
             db.rollback()
             db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
@@ -142,13 +152,14 @@ DOCUMENT:
         db.close()
 
 
-@router.post("/upload", response_model=ContractResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=ContractResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_contract(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    logger.info("upload request received")
     content = await read_validated_pdf(file)
 
     # Ensure upload folder exists
@@ -163,6 +174,7 @@ async def upload_contract(
     # Save PDF
     with open(file_path, "wb") as f:
         f.write(content)
+    logger.info("PDF saved")
 
     # Create database record
     db_contract = Contract(
@@ -176,6 +188,7 @@ async def upload_contract(
     db.add(db_contract)
     db.commit()
     db.refresh(db_contract)
+    logger.info("DB contract created")
 
     # Queue background processing
     background_tasks.add_task(process_contract_background, str(contract_id), file_path)

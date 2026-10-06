@@ -3,8 +3,17 @@ import json
 import re
 import math
 import logging
+import psutil
 from typing import List, Dict, Any, Optional
 import threading
+
+def log_memory(stage: str):
+    try:
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        logger.info(f"MEMORY [{stage}]: {mem_info.rss / 1024 / 1024:.2f} MB")
+    except Exception:
+        pass
 
 try:
     import numpy as np
@@ -69,30 +78,50 @@ class VectorService:
             # Double-checked locking
             if self.model is not None:
                 return True
-                
-            global SentenceTransformer
-            if SentenceTransformer is None:
-                try:
-                    from sentence_transformers import SentenceTransformer as _SentenceTransformer
-                    import torch
-                    # Restrict PyTorch thread usage to save memory
-                    torch.set_num_threads(1)
-                    SentenceTransformer = _SentenceTransformer
-                except Exception as exc:
-                    self.model_error = f"Sentence transformers is unavailable. Error: {exc}"
-                    logger.error("Failed to lazily import SentenceTransformer: %s", exc)
-                    return False
 
-            logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
-            try:
-                self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
-            except Exception as exc:
-                self.model_error = str(exc)
-                logger.error("Failed to load embedding model: %s", exc)
+            if not settings.GEMINI_API_KEY:
+                self.model_error = "GEMINI_API_KEY is not configured but is required for vector embeddings."
+                logger.error(self.model_error)
                 return False
 
-            logger.info("Embedding model loaded")
-            return True
+            logger.info("Using cloud-safe Gemini embedding model (gemini-embedding-2) to avoid OOM")
+            try:
+                from google import genai
+                from google.genai import types
+                
+                class GeminiEmbeddingModel:
+                    def __init__(self):
+                        self.model = "gemini-embedding-2"
+                        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+                    def encode(self, texts, convert_to_numpy=True, show_progress_bar=False, batch_size=32):
+                        if isinstance(texts, str):
+                            texts = [texts]
+                        embeddings = []
+                        # Process sequentially to guarantee 1 vector per chunk and keep memory extremely low
+                        for text in texts:
+                            # Use asymmetric retrieval format for documents
+                            formatted_doc = f"title: Contract | text: {text}"
+                            res = self.client.models.embed_content(
+                                model=self.model,
+                                contents=formatted_doc,
+                                config=types.EmbedContentConfig(
+                                    output_dimensionality=384
+                                )
+                            )
+                            embeddings.append(res.embeddings[0].values)
+                        if convert_to_numpy:
+                            import numpy as np
+                            return np.array(embeddings)
+                        return embeddings
+                
+                self.model = GeminiEmbeddingModel()
+                logger.info("embedding model load completed (Gemini)")
+                return True
+            except Exception as exc:
+                self.model_error = f"Failed to initialize Gemini embedding model: {exc}"
+                logger.error(self.model_error)
+                return False
 
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         if not scores:
@@ -107,8 +136,18 @@ class VectorService:
     def _get_embedding(self, text: str) -> List[float]:
         if not self._ensure_model():
             raise RuntimeError(self.model_error or "Embedding model is unavailable.")
-        embedding = self.model.encode(text, convert_to_numpy=True)
-        return embedding.tolist()
+        
+        # Use asymmetric retrieval format for query
+        formatted_query = f"task: question answering | query: {text}"
+        
+        # Bypass the standard `encode` since it adds Document formatting
+        from google.genai import types
+        res = self.model.client.models.embed_content(
+            model=self.model.model,
+            contents=formatted_query,
+            config=types.EmbedContentConfig(output_dimensionality=384)
+        )
+        return res.embeddings[0].values
 
     def _get_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         if not self._ensure_model():
@@ -182,13 +221,22 @@ class VectorService:
 
         child_texts = [chunk["child_text"] for chunk in chunks]
         embeddings = []
-        for start in range(0, len(child_texts), settings.EMBEDDING_BATCH_SIZE):
-            batch = child_texts[start:start + settings.EMBEDDING_BATCH_SIZE]
+        
+        # Use a reduced batch size to save memory in production
+        batch_size = min(settings.EMBEDDING_BATCH_SIZE, 8) 
+        
+        for start in range(0, len(child_texts), batch_size):
+            logger.info(f"each embedding batch started {start} to {start + batch_size}")
+            log_memory(f"before embedding generation {start}")
+            batch = child_texts[start:start + batch_size]
             embeddings.extend(self._get_embeddings_batch(batch))
+            log_memory(f"after embedding generation {start}")
+            logger.info(f"each embedding batch completed {start} to {start + batch_size}")
 
         self.chunk_cache[contract_id] = chunks
 
         if db is not None:
+            logger.info("pgvector insert started")
             from app.models.models import ContractEmbedding
             db.query(ContractEmbedding).filter(ContractEmbedding.contract_id == contract_id).delete()
             for chunk, embedding in zip(chunks, embeddings):
@@ -203,6 +251,7 @@ class VectorService:
                 )
                 db.add(db_embedding)
             db.flush()
+            logger.info("pgvector insert completed")
 
         logger.info("Indexed %s chunks for contract_id=%s using pgvector", len(chunks), contract_id)
 
