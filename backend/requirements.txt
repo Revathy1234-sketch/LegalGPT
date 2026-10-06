@@ -26,3 +26,4 @@ pypdf==3.17.4
 reportlab==4.5.1
 openai>=1.30.0
 google-genai==2.26.0
+psutil==7.2.2
