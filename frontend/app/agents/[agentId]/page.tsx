@@ -605,7 +605,7 @@ function AgentDetailContent({ agentId }: { agentId: string }) {
               }}
               className="appearance-none bg-slate-50 border border-slate-200 text-slate-900/90 text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {(contracts || []).map((c) => (
+              {(contracts || []).filter((c) => c.id !== activeContractId).map((c) => (
                 <option key={c.id} value={c.id}>{c.file_name}</option>
               ))}
             </select>

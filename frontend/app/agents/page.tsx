@@ -305,13 +305,18 @@ function AgentWorkspaceContent() {
     mutationFn: (id: string) => analysisApi.risk(id),
     onMutate: () => setStatus("risk", { status: "running" }),
     onSuccess: (data) => {
-      const matrix = (data.risk_matrix || []) as RiskMatrixItem[];
-      setRiskSlices(matrixToSlices(matrix as unknown as Array<Record<string, unknown>>));
-      setStatus("risk", {
-        status: "done",
-        preview: `Score ${data.overall_score}/100 (${riskLevel(data.overall_score)}) · ${matrix.length} findings`,
-      });
-      showEvidence("Agent Workspace · Risk Analysis", evidenceFromRiskMatrix(matrix as Array<Record<string, unknown>>));
+      if (data.overall_score !== undefined) {
+         // Fallback if returned synchronously
+         const matrix = (data.risk_matrix || []) as RiskMatrixItem[];
+         setRiskSlices(matrixToSlices(matrix as unknown as Array<Record<string, unknown>>));
+         setStatus("risk", {
+           status: "done",
+           preview: `Score ${data.overall_score}/100 (${riskLevel(data.overall_score)}) · ${matrix.length} findings`,
+         });
+         showEvidence("Agent Workspace · Risk Analysis", evidenceFromRiskMatrix(matrix as Array<Record<string, unknown>>));
+      } else {
+         setStatus("risk", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Risk analysis failed";
@@ -324,9 +329,12 @@ function AgentWorkspaceContent() {
     mutationFn: (id: string) => analysisApi.clauses(id),
     onMutate: () => setStatus("clauses", { status: "running" }),
     onSuccess: (data) => {
-      const clauses = (data.clauses || []) as unknown as Array<Record<string, unknown>>;
-      setStatus("clauses", { status: "done", preview: `${clauses.length} clauses extracted with source text` });
-      showEvidence("Agent Workspace · Clause Extraction", evidenceFromClauses(clauses));
+      if (data.clauses && data.clauses.length > 0) {
+         setStatus("clauses", { status: "done", preview: `${data.clauses.length} clauses extracted with source text` });
+         showEvidence("Agent Workspace · Clause Extraction", evidenceFromClauses(data.clauses as any));
+      } else {
+         setStatus("clauses", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) =>
       setStatus("clauses", { status: "error", preview: err instanceof Error ? err.message : "Clause extraction failed" }),
@@ -336,23 +344,27 @@ function AgentWorkspaceContent() {
     mutationFn: (id: string) => analysisApi.summarize(id),
     onMutate: () => setStatus("summary", { status: "running" }),
     onSuccess: (data) => {
-      const text = data.summary || "";
-      const bullets = text.split(/\n+/).filter((line) => line.trim().length > 40).slice(0, 6);
-      setStatus("summary", { status: "done", preview: text.slice(0, 180).replace(/\n/g, " ") + "…" });
-      showEvidence(
-        "Agent Workspace · Executive Summary",
-        bullets.map((line, i) => ({
-          id: `summary-${i}`,
-          agent: "Executive Summary",
-          finding: line.replace(/^[#>*-\s]+/, "").slice(0, 90),
-          severity: "Info",
-          explanation: "Condensed by the Summary Agent directly from the uploaded PDF.",
-          page: "PDF",
-          section: "Summary",
-          sourceText: line.slice(0, 500),
-          highlight: line.split(/(?<=[.!?])\s/)[0]?.slice(0, 200) || "",
-        })),
-      );
+      if (data.summary && data.summary !== "No summary generated.") {
+         const text = data.summary || "";
+         const bullets = text.split(/\n+/).filter((line) => line.trim().length > 40).slice(0, 6);
+         setStatus("summary", { status: "done", preview: text.slice(0, 180).replace(/\n/g, " ") + "…" });
+         showEvidence(
+           "Agent Workspace · Executive Summary",
+           bullets.map((line, i) => ({
+             id: `summary-${i}`,
+             agent: "Executive Summary",
+             finding: line.replace(/^[#>*-\s]+/, "").slice(0, 90),
+             severity: "Info",
+             explanation: "Condensed by the Summary Agent directly from the uploaded PDF.",
+             page: "PDF",
+             section: "Summary",
+             sourceText: line.slice(0, 500),
+             highlight: line.split(/(?<=[.!?])\s/)[0]?.slice(0, 200) || "",
+           })),
+         );
+      } else {
+         setStatus("summary", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) =>
       setStatus("summary", { status: "error", preview: err instanceof Error ? err.message : "Summary failed" }),
@@ -362,12 +374,16 @@ function AgentWorkspaceContent() {
     mutationFn: (id: string) => analysisApi.compliance(id),
     onMutate: () => setStatus("compliance", { status: "running" }),
     onSuccess: (data) => {
-      const issues = (data.issues || []) as unknown as Array<Record<string, unknown>>;
-      setStatus("compliance", {
-        status: "done",
-        preview: data.compliant ? "Compliant — no blocking issues" : `${issues.length} compliance gaps found`,
-      });
-      showEvidence("Agent Workspace · Compliance", evidenceFromCompliance(issues));
+      if (data.issues && data.issues.length > 0 || data.compliant) {
+         const issues = (data.issues || []) as unknown as Array<Record<string, unknown>>;
+         setStatus("compliance", {
+           status: "done",
+           preview: data.compliant ? "Compliant — no blocking issues" : `${issues.length} compliance gaps found`,
+         });
+         showEvidence("Agent Workspace · Compliance", evidenceFromCompliance(issues));
+      } else {
+         setStatus("compliance", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Compliance check failed";
@@ -382,9 +398,13 @@ function AgentWorkspaceContent() {
     mutationFn: (id: string) => analysisApi.negotiation(id),
     onMutate: () => setStatus("negotiation", { status: "running" }),
     onSuccess: (data) => {
-      const suggestions = (data.negotiation_suggestions || []) as unknown as Array<Record<string, unknown>>;
-      setStatus("negotiation", { status: "done", preview: `${suggestions.length} redline suggestions ready` });
-      showEvidence("Agent Workspace · Negotiation", evidenceFromNegotiation(suggestions));
+      if (data.negotiation_suggestions && data.negotiation_suggestions.length > 0) {
+         const suggestions = (data.negotiation_suggestions || []) as unknown as Array<Record<string, unknown>>;
+         setStatus("negotiation", { status: "done", preview: `${suggestions.length} redline suggestions ready` });
+         showEvidence("Agent Workspace · Negotiation", evidenceFromNegotiation(suggestions));
+      } else {
+         setStatus("negotiation", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Negotiation analysis failed";
@@ -400,10 +420,14 @@ function AgentWorkspaceContent() {
     mutationFn: (id: string) => analysisApi.knowledgeGraph(id),
     onMutate: () => setStatus("knowledge_graph", { status: "running" }),
     onSuccess: (data) => {
-      const entities = (data.result?.entities || []) as unknown as Array<Record<string, unknown>>;
-      const rels = data.result?.relationships?.length || 0;
-      setStatus("knowledge_graph", { status: "done", preview: `${entities.length} entities · ${rels} relationships` });
-      showEvidence("Agent Workspace · Knowledge Graph", evidenceFromKnowledgeGraph(entities));
+      if (data.result?.entities && data.result.entities.length > 0) {
+         const entities = (data.result?.entities || []) as unknown as Array<Record<string, unknown>>;
+         const rels = data.result?.relationships?.length || 0;
+         setStatus("knowledge_graph", { status: "done", preview: `${entities.length} entities · ${rels} relationships` });
+         showEvidence("Agent Workspace · Knowledge Graph", evidenceFromKnowledgeGraph(entities));
+      } else {
+         setStatus("knowledge_graph", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) =>
       setStatus("knowledge_graph", { status: "error", preview: err instanceof Error ? err.message : "Knowledge graph failed" }),
@@ -425,24 +449,28 @@ function AgentWorkspaceContent() {
       analysisApi.compare({ contract_a_id: a, contract_b_id: b }),
     onMutate: () => setStatus("compare", { status: "running" }),
     onSuccess: (data) => {
-      setStatus("compare", {
-        status: "done",
-        preview: `${data.similarities.length} similarities · ${data.differences.length} differences · ${data.missing_clauses.length} missing clauses`,
-      });
-      showEvidence(
-        "Agent Workspace · Comparison",
-        data.missing_clauses.slice(0, 6).map((clause, i) => ({
-          id: `missing-${i}`,
-          agent: "Comparison",
-          finding: `Missing clause: ${clause}`.slice(0, 90),
-          severity: "High",
-          explanation: "Present in one contract but absent in the other.",
-          page: "PDF",
-          section: "Comparison",
-          sourceText: clause.slice(0, 400),
-          highlight: clause.slice(0, 160),
-        })),
-      );
+      if (data.similarities && data.similarities.length > 0) {
+         setStatus("compare", {
+           status: "done",
+           preview: `${data.similarities.length} similarities · ${data.differences.length} differences · ${data.missing_clauses.length} missing clauses`,
+         });
+         showEvidence(
+           "Agent Workspace · Comparison",
+           data.missing_clauses.slice(0, 6).map((clause, i) => ({
+             id: `missing-${i}`,
+             agent: "Comparison",
+             finding: `Missing clause: ${clause}`.slice(0, 90),
+             severity: "High",
+             explanation: "Present in one contract but absent in the other.",
+             page: "PDF",
+             section: "Comparison",
+             sourceText: clause.slice(0, 400),
+             highlight: clause.slice(0, 160),
+           })),
+         );
+      } else {
+         setStatus("compare", { status: "running", preview: "Processing in background..." });
+      }
     },
     onError: (err: unknown) =>
       setStatus("compare", { status: "error", preview: err instanceof Error ? err.message : "Comparison failed" }),
@@ -664,7 +692,7 @@ function AgentWorkspaceContent() {
               className="appearance-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-lg pl-3 pr-8 py-2 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               {!hasContracts ? <option>—</option> :
-                contracts!.map((c: ContractResponse) => (
+                contracts!.filter((c) => c.id !== effectiveContractId).map((c: ContractResponse) => (
                   <option key={c.id} value={c.id}>{c.file_name}</option>
                 ))}
             </select>

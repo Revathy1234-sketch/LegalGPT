@@ -246,6 +246,7 @@ def get_stored_results(
 @router.post('/summarize/{contract_id}', response_model=ContractResponse)
 def run_summarize(
     contract_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -256,8 +257,6 @@ def run_summarize(
     validate_contract_access(contract, current_user)
     log_endpoint_call('run_summarize', str(contract_id))
 
-    # Cached summary: return immediately WITHOUT logging a new execution.
-    # (Agents run exactly once; revisiting views the stored result.)
     if contract.summary and contract.summary != "No summary generated.":
         latest_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).order_by(RiskAnalysis.evaluated_at.desc()).first()
         ground_and_persist(db, contract_id, latest_risk)
@@ -273,44 +272,45 @@ def run_summarize(
             "risk_analysis": latest_risk
         }
 
-    start_time = time.perf_counter()
-    response = run_summary_agent(str(contract_id))
-    end_time = time.perf_counter()
-    _reset_session(db)
-    result = _agent_payload(response)
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            response = run_summary_agent(str(contract_id))
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            result = _agent_payload(response)
+            
+            _log_execution(db_bg, 'SummaryAgent', str(contract_id), 'summarize', response, start_time, end_time)
+            
+            c = db_bg.query(Contract).filter(Contract.id == contract_id).first()
+            if c:
+                c.summary = str(result.get('summary', ''))
+                db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background summarize failed: {e}")
+        finally:
+            db_bg.close()
 
-    _log_execution(
-        db, 'SummaryAgent', str(contract_id), 'summarize',
-        response, start_time, end_time,
-    )
+    background_tasks.add_task(bg_task)
 
-    contract.summary = str(result.get('summary', ''))
-    db.commit()
-    db.refresh(contract)
-    
-    # Map the DB relationships to the Pydantic schema expected names
-    latest_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).order_by(RiskAnalysis.evaluated_at.desc()).first()
-    ground_and_persist(db, contract_id, latest_risk)
-    
-    # Return as dict to satisfy ContractResponse
-    response_data = {
+    return {
         "id": contract.id,
         "file_name": contract.file_name,
         "storage_url": contract.storage_url,
         "status": contract.status,
-        "summary": contract.summary,
+        "summary": "No summary generated.",
         "uploaded_by": contract.uploaded_by,
         "created_at": contract.created_at,
-        "clauses": contract.clause_extractions if hasattr(contract, 'clause_extractions') else [],
-        "risk_analysis": latest_risk
+        "clauses": [],
+        "risk_analysis": None
     }
-    
-    return response_data
 
 
 @router.post('/risk/{contract_id}', response_model=RiskAnalysisResponse)
 def run_risk_analysis(
     contract_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -325,48 +325,60 @@ def run_risk_analysis(
     if not force:
         cached = _get_cached_result(db, contract_id, 'risk_analysis')
         if cached:
-            # We must also return the db_risk schema or at least a RiskAnalysisResponse compatible dict
             db_risk = db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).first()
             if db_risk:
                 ground_and_persist(db, contract_id, db_risk)
                 return db_risk
 
-    start_time = time.perf_counter()
-    response = run_risk_agent(str(contract_id))
-    end_time = time.perf_counter()
-    _reset_session(db)
-    result = _agent_payload(response)
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            response = run_risk_agent(str(contract_id))
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            result = _agent_payload(response)
 
-    _log_execution(
-        db, 'RiskAgent', str(contract_id), 'risk_analysis',
-        response, start_time, end_time,
-    )
+            _log_execution(
+                db_bg, 'RiskAgent', str(contract_id), 'risk_analysis',
+                response, start_time, end_time,
+            )
 
-    risks = result.get('risk_matrix', [])
-    mitigation_plan = result.get('mitigation_plan')
-    if not isinstance(mitigation_plan, str):
-        mitigation_plan = 'Mitigation suggestions compiled. Refer to negotiation suggestions.'
+            risks = result.get('risk_matrix', [])
+            mitigation_plan = result.get('mitigation_plan')
+            if not isinstance(mitigation_plan, str):
+                mitigation_plan = 'Mitigation suggestions compiled. Refer to negotiation suggestions.'
 
-    # Guarantee verbatim PDF proof for every finding before persisting.
-    risks, _ = ground_risk_matrix(db, contract_id, risks)
+            risks, _ = ground_risk_matrix(db_bg, contract_id, risks)
 
-    db.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).delete()
-    try:
-        raw_score = result.get('overall_score', 0)
-        overall_score = int(float(raw_score))
-    except (ValueError, TypeError):
-        overall_score = 0
+            db_bg.query(RiskAnalysis).filter(RiskAnalysis.contract_id == contract_id).delete()
+            try:
+                raw_score = result.get('overall_score', 0)
+                overall_score = int(float(raw_score))
+            except (ValueError, TypeError):
+                overall_score = 0
 
-    db_risk = RiskAnalysis(
+            db_risk = RiskAnalysis(
+                contract_id=contract_id,
+                overall_score=overall_score,
+                risk_matrix=risks if isinstance(risks, list) else [],
+                mitigation_plan=mitigation_plan,
+            )
+            db_bg.add(db_risk)
+            db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background risk agent failed: {e}")
+        finally:
+            db_bg.close()
+
+    background_tasks.add_task(bg_task)
+
+    return RiskAnalysis(
         contract_id=contract_id,
-        overall_score=overall_score,
-        risk_matrix=risks if isinstance(risks, list) else [],
-        mitigation_plan=mitigation_plan,
+        overall_score=0,
+        risk_matrix=[],
+        mitigation_plan="Processing..."
     )
-    db.add(db_risk)
-    db.commit()
-    db.refresh(db_risk)
-    return db_risk
 
 
 @router.post('/clauses/{contract_id}', response_model=ClauseExtractionResponse)
@@ -430,6 +442,7 @@ def extract_clauses(
 @router.post('/compliance/{contract_id}', response_model=ComplianceResponse)
 def run_compliance_analysis(
     contract_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -450,66 +463,72 @@ def run_compliance_analysis(
                 'recommendations': _string_list(cached.get('recommendations', []))
             }
 
-    start_time = time.perf_counter()
-    response = run_compliance_agent(str(contract_id))
-    end_time = time.perf_counter()
-    _reset_session(db)
-    result = _agent_payload(response)
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            response = run_compliance_agent(str(contract_id))
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            result = _agent_payload(response)
 
-    _log_execution(
-        db, 'ComplianceAgent', str(contract_id), 'compliance_check',
-        response, start_time, end_time,
-    )
+            _log_execution(
+                db_bg, 'ComplianceAgent', str(contract_id), 'compliance_check',
+                response, start_time, end_time,
+            )
 
-    issues = result.get('issues', [])
-    recommendations = result.get('recommendations', [])
-    if not isinstance(issues, list):
-        issues = []
-    if not isinstance(recommendations, list):
-        recommendations = []
-    compliant = bool(result.get('compliant', False))
+            issues = result.get('issues', [])
+            recommendations = result.get('recommendations', [])
+            if not isinstance(issues, list):
+                issues = []
+            if not isinstance(recommendations, list):
+                recommendations = []
+            compliant = bool(result.get('compliant', False))
 
-    issues_mapped = []
-    for issue in issues:
-        if not isinstance(issue, dict):
-            continue
-        framework = issue.get('framework') or result.get('framework') or 'Compliance Framework'
-        clause_type = issue.get('clause_type') or result.get('clause_type') or 'Compliance'
-        status = issue.get('status') or result.get('status') or 'Non-Compliant'
-        gap_analysis = issue.get('gap_analysis') or issue.get('requirement') or issue.get('issue') or issue.get('description') or ''
-        issues_mapped.append({
-            'framework': str(framework),
-            'clause_type': str(clause_type),
-            'status': str(status),
-            'gap_analysis': str(gap_analysis),
-        })
+            issues_mapped = []
+            for issue in issues:
+                if not isinstance(issue, dict):
+                    continue
+                framework = issue.get('framework') or result.get('framework') or 'Compliance Framework'
+                clause_type = issue.get('clause_type') or result.get('clause_type') or 'Compliance'
+                status = issue.get('status') or result.get('status') or 'Non-Compliant'
+                gap_analysis = issue.get('gap_analysis') or issue.get('requirement') or issue.get('issue') or issue.get('description') or ''
+                issues_mapped.append({
+                    'framework': str(framework),
+                    'clause_type': str(clause_type),
+                    'status': str(status),
+                    'gap_analysis': str(gap_analysis),
+                })
 
-    db.query(ContractRiskAssessment).filter(
-        ContractRiskAssessment.contract_id == contract_id,
-        ContractRiskAssessment.overall_score == -1,
-    ).delete()
-    db.add(ContractRiskAssessment(
-        contract_id=contract_id,
-        overall_score=-1,
-        risk_matrix=issues_mapped,
-        confidence=getattr(response, 'confidence_score', 1.0 if compliant else 0.5),
-    ))
-    db.commit()
+            db_bg.query(ContractRiskAssessment).filter(
+                ContractRiskAssessment.contract_id == contract_id,
+                ContractRiskAssessment.overall_score == -1,
+            ).delete()
+            db_bg.add(ContractRiskAssessment(
+                contract_id=contract_id,
+                overall_score=-1,
+                risk_matrix=issues_mapped,
+                confidence=getattr(response, 'confidence_score', 1.0 if compliant else 0.5),
+            ))
+            db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background compliance agent failed: {e}")
+        finally:
+            db_bg.close()
 
-    logger.info(
-        'Compliance check completed: %s issues found for contract %s',
-        len(issues_mapped), contract_id,
-    )
+    background_tasks.add_task(bg_task)
+
     return {
-        'compliant': compliant,
-        'issues': issues_mapped,
-        'recommendations': _string_list(recommendations),
+        'compliant': False,
+        'issues': [],
+        'recommendations': []
     }
 
 
 @router.post('/negotiation/{contract_id}', response_model=NegotiationAnalysisResponse)
 def run_negotiation_analysis(
     contract_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -532,48 +551,54 @@ def run_negotiation_analysis(
                 'priority_actions': _string_list(cached.get('priority_actions', []))
             }
 
-    start_time = time.perf_counter()
-    response = run_negotiation_agent(str(contract_id))
-    end_time = time.perf_counter()
-    _reset_session(db)
-    result = _agent_payload(response)
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            response = run_negotiation_agent(str(contract_id))
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            result = _agent_payload(response)
 
-    _log_execution(
-        db, 'NegotiationAgent', str(contract_id), 'negotiation_analysis',
-        response, start_time, end_time,
-    )
+            _log_execution(
+                db_bg, 'NegotiationAgent', str(contract_id), 'negotiation_analysis',
+                response, start_time, end_time,
+            )
 
-    suggestions = result.get('negotiation_suggestions', [])
-    if not isinstance(suggestions, list):
-        suggestions = []
+            suggestions = result.get('negotiation_suggestions', [])
+            if not isinstance(suggestions, list):
+                suggestions = []
 
-    db.query(ContractRiskAssessment).filter(
-        ContractRiskAssessment.contract_id == contract_id,
-        ContractRiskAssessment.overall_score == -2,
-    ).delete()
-    db.add(ContractRiskAssessment(
-        contract_id=contract_id,
-        overall_score=-2,
-        risk_matrix=suggestions,
-        confidence=getattr(response, 'confidence_score', 1.0),
-    ))
-    db.commit()
+            db_bg.query(ContractRiskAssessment).filter(
+                ContractRiskAssessment.contract_id == contract_id,
+                ContractRiskAssessment.overall_score == -2,
+            ).delete()
+            db_bg.add(ContractRiskAssessment(
+                contract_id=contract_id,
+                overall_score=-2,
+                risk_matrix=suggestions,
+                confidence=getattr(response, 'confidence_score', 1.0),
+            ))
+            db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background negotiation agent failed: {e}")
+        finally:
+            db_bg.close()
 
-    logger.info(
-        'Negotiation analysis completed: %s suggestions for contract %s',
-        len(suggestions), contract_id,
-    )
+    background_tasks.add_task(bg_task)
+
     return {
-        'clauses': result.get('clauses', []),
-        'risk_matrix': result.get('risk_matrix', []),
-        'compliance_report': result.get('compliance_report', []),
-        'negotiation_suggestions': suggestions,
+        'clauses': [],
+        'risk_matrix': [],
+        'compliance_report': [],
+        'negotiation_suggestions': [],
     }
 
 
 @router.post('/compare', response_model=CompareResponse)
 def compare_contracts(
     payload: CompareRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -585,17 +610,39 @@ def compare_contracts(
     validate_contract_access(contract_a, current_user)
     validate_contract_access(contract_b, current_user)
 
-    response = run_comparison_agent(
-        str(payload.contract_a_id),
-        str(payload.contract_b_id),
-    )
-    result = _agent_payload(response)
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            response = run_comparison_agent(
+                str(payload.contract_a_id),
+                str(payload.contract_b_id),
+            )
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            
+            # Create a combined ID or pick the first for the execution log
+            _log_execution(
+                db_bg, 'ComparisonAgent', str(payload.contract_a_id), 'comparison',
+                response, start_time, end_time,
+            )
+            
+            # Since compare is ephemeral, we don't save to the DB in this version,
+            # but we could store it in AgentExecutionLog for caching
+            db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background comparison agent failed: {e}")
+        finally:
+            db_bg.close()
+
+    background_tasks.add_task(bg_task)
+
     return {
-        'similarities': _string_list(result.get('similarities', [])),
-        'differences': _string_list(result.get('differences', [])),
-        'missing_clauses': _string_list(result.get('missing_clauses', [])),
-        'risk_differences': _string_list(result.get('risk_differences', [])),
-        'summary': str(result.get('summary', '')),
+        'similarities': [],
+        'differences': [],
+        'missing_clauses': [],
+        'risk_differences': [],
+        'summary': 'Processing comparison...',
     }
 
 
