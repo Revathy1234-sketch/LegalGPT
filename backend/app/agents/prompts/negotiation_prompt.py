@@ -21,6 +21,8 @@ NEGOTIATION FRAMEWORK:
 2. RISK PRIORITIZATION: Which risks are deal-breakers vs. acceptable trade-offs?
 3. COMMERCIAL VIABILITY: Is this contract commercially acceptable as drafted?
 
+*CRITICAL FOCUS ITEMS*: Please explicitly answer and provide suggestions for: “What clauses should the Customer negotiate before signing?”
+
 For each suggestion, provide:
 - clause_title: The exact title or section of the clause being addressed
 - reason: Why this clause needs negotiation (specific to this contract)

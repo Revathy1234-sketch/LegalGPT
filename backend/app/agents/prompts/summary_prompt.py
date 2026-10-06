@@ -21,6 +21,8 @@ YOUR SUMMARY MUST COVER ALL OF THE FOLLOWING (based only on what is present in t
 10. IMPORTANT DEADLINES: Key dates, milestones, renewal dates, expiration.
 11. SPECIAL PROVISIONS: Any unusual or noteworthy terms not covered above.
 
+*CRITICAL FOCUS ITEMS*: Please explicitly ensure you identify and summarize: The Parties involved, the Contract Term, the Fees/Pricing structure, and the major Obligations of both sides.
+
 If any section is not present in the contract, state "Not explicitly stated in the contract."
 
 ALSO RETURN the following structured fields:

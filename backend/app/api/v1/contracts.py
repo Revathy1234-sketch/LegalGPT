@@ -131,6 +131,18 @@ def process_contract_background(contract_id: str, file_path: str):
         except Exception as e:
             logger.error(f"Background risk agent error: {e}")
 
+        try:
+            from app.api.v1.analysis import run_compliance_analysis
+            run_compliance_analysis(contract_id=contract_uuid, force=True, db=db, current_user=uploader)
+        except Exception as e:
+            logger.error(f"Background compliance agent error: {e}")
+
+        try:
+            from app.api.v1.analysis import run_negotiation_analysis
+            run_negotiation_analysis(contract_id=contract_uuid, force=True, db=db, current_user=uploader)
+        except Exception as e:
+            logger.error(f"Background negotiation agent error: {e}")
+
         # Cleanup local PDF file to save space
         try:
             if os.path.exists(file_path):

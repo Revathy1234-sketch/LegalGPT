@@ -31,6 +31,8 @@ Framework selection guidance:
 
 DO NOT automatically include GDPR, HIPAA, PCI-DSS, or SOC 2 unless the contract actually concerns personal data, healthcare, payment processing, or information security.
 
+*CRITICAL FOCUS ITEMS*: Please specifically evaluate and check for provisions related to: Data Protection/Privacy, Security measures/standards, the use of Subprocessors, and Applicable-Law/Governing-Law compliance, if present in the text.
+
 STEP 3 — ASSESS COMPLIANCE:
 For each applicable framework, evaluate whether the contract meets the requirements.
 

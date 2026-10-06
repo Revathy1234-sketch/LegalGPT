@@ -29,6 +29,8 @@ Dispute Resolution | Force Majeure | Assignment | Severability | Notices |
 Amendments | Warranty | Intellectual Property | Audit Rights | Data Protection |
 Miscellaneous | Other
 
+*CRITICAL FOCUS ITEMS*: Please ensure you thoroughly search for and extract clauses related to: Termination, SLA (Service Level Agreements), Confidentiality, Indemnification/Indemnity, Liability/Limitation of Liability, and Data Protection/Privacy.
+
 For each clause, estimate a confidence_score between 0.0 and 1.0:
 - 1.0 = exact verbatim clause extracted with clear section heading
 - 0.7 = most of the clause text found, minor gaps

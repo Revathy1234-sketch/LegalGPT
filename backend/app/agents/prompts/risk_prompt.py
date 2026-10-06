@@ -40,6 +40,8 @@ For example:
 
 DO NOT list generic risks (e.g., IP ownership, source code, software licensing, force majeure) unless they are ACTUALLY PRESENT or RELEVANT to this specific contract.
 
+*CRITICAL FOCUS ITEMS*: Please thoroughly search for and specifically flag risks related to: Auto-renewals (e.g., 90-day auto-renewal periods), Early Termination Fees (e.g., 30% fees), Liability Exceptions/Caps, and International Data Processing or data transfers out of jurisdiction.
+
 STEP 3 — RISK SEVERITY CALIBRATION:
 - Critical (0.9-1.0): Material financial exposure, regulatory violation risk, operational continuity threat
 - High (0.7-0.89): Significant liability, compliance burden, substantial financial impact

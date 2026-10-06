@@ -31,6 +31,8 @@ RELATIONSHIPS TO CAPTURE:
 - CONTINGENT_ON: What conditions activate/trigger each obligation
 - CONSEQUENCE_OF_BREACH: What happens if obligation is breached
 
+*CRITICAL FOCUS ITEMS*: Please explicitly ensure you identify and map the relationships between: the Customer/Client, the Provider/Vendor, all Obligations, Fees/Pricing, Data Handling, Subprocessors, Termination rights, and Governing Law.
+
 For each entity, include a confidence_score (0.0-1.0) reflecting how clearly the entity is stated in the contract.
 
 Return valid JSON ONLY:
