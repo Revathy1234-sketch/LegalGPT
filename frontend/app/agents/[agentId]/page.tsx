@@ -573,7 +573,12 @@ function AgentDetailContent({ agentId }: { agentId: string }) {
           <label className="text-sm font-medium text-slate-700">Contract:</label>
           <select
             value={activeContractId}
-            onChange={(e) => { runMutation.reset(); evidencedFor.current = null; setContractId(e.target.value); }}
+            onChange={(e) => { 
+              runMutation.reset(); 
+              evidencedFor.current = null; 
+              setContractId(e.target.value); 
+              router.push(`/agents/${agentId}?contractId=${e.target.value}`);
+            }}
             className="appearance-none bg-slate-50 border border-slate-200 text-slate-900/90 text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
           >
             {(contracts || []).map((c) => (
@@ -587,7 +592,10 @@ function AgentDetailContent({ agentId }: { agentId: string }) {
             <label className="text-sm font-medium text-slate-700">Compare with:</label>
             <select
               value={activeCompareId}
-              onChange={(e) => { runMutation.reset(); setCompareId(e.target.value); }}
+              onChange={(e) => { 
+                runMutation.reset(); 
+                setCompareId(e.target.value); 
+              }}
               className="appearance-none bg-slate-50 border border-slate-200 text-slate-900/90 text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
             >
               {(contracts || []).map((c) => (

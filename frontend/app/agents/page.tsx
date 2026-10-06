@@ -171,10 +171,10 @@ function AgentWorkspaceContent() {
 
   const urlId = searchParams.get("contractId");
   useEffect(() => {
-    if (urlId && urlId !== contractId) {
+    if (urlId) {
       setContractId(urlId);
     }
-  }, [urlId, contractId]);
+  }, [urlId]);
 
   const { data: contracts, isLoading: loadingContracts } = useQuery({
     queryKey: ["contracts"],
@@ -476,7 +476,10 @@ function AgentWorkspaceContent() {
             <div className="relative">
               <select
                 value={effectiveContractId}
-                onChange={(e) => setContractId(e.target.value)}
+                onChange={(e) => {
+                  setContractId(e.target.value);
+                  router.push(`?contractId=${e.target.value}`);
+                }}
                 disabled={loadingContracts || !hasContracts}
                 className="appearance-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white/90 text-sm rounded-lg pl-9 pr-9 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium shadow-sm disabled:opacity-60"
               >
