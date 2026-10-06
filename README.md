@@ -28,104 +28,91 @@ LegalGPT is an AI-powered contract intelligence platform that helps users analyz
 
 ```mermaid
 flowchart TB
-    classDef client fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0f172a
-    classDef api fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#0f172a
-    classDef llm fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a
-    classDef data fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#0f172a
-    classDef ops fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#0f172a
 
-    subgraph "Client Layer"
-        U([User / Browser]):::client
-        FE[Next.js React Frontend]:::client
-        U <-->|HTTP/REST, WebSocket| FE
-    end
+    U[User]
 
-    subgraph "API & Orchestration Layer (FastAPI)"
-        API[FastAPI Gateway]:::api
-        AUTH[JWT Auth Middleware]:::api
-        WORKER[BackgroundTasks / Asyncio]:::api
-        
-        subgraph "LLM Orchestration & RAG Pipeline"
-            ORCH[LangChain & LangGraph Orchestrator]:::api
-            ROUTER{Semantic Router}:::api
-            
-            subgraph "Specialized Multi-Agents"
-                SUMMARY[Executive Summary Agent]:::api
-                CLAUSE[Clause Extraction Agent]:::api
-                RISK[Risk Assessment Agent]:::api
-                COMPLIANCE[Regulatory Compliance Agent]:::api
-                NEGOTIATION[Negotiation Playbook Agent]:::api
-                CHAT[Conversational Q&A Agent]:::api
-                COMPARISON[Delta Comparison Agent]:::api
-                GRAPH[Knowledge Graph Builder]:::api
-            end
-        end
+    FE[Next.js / React Frontend]
 
-        subgraph "Ingestion & Processing"
-            INGEST[PDF Bytes Parser]:::api
-            EXTRACT[PyMuPDF Text Extraction]:::api
-            CHUNK[Recursive Parent/Child Chunker]:::api
-            EMBED_API[Embedding Service]:::api
-        end
-    end
+    API[FastAPI Backend]
 
-    subgraph "Data & Vector Storage"
-        DB[(PostgreSQL / Neon)]:::data
-        VECTOR[(pgvector HNSW Index)]:::data
-        BM25[(BM25 Sparse Index)]:::data
-        CACHE[(Redis Caching)]:::data
-    end
+    AUTH[Authentication and Authorization]
 
-    subgraph "External ML Models & Services"
-        LLM_NIM[NVIDIA NIM - Primary LLM]:::llm
-        LLM_OPENROUTER[OpenRouter - Fallback LLM]:::llm
-        LLM_GEMINI[Google Gemini 1.5 - Vision & Embedding]:::llm
-        EMBED_MODEL[gemini-embedding-2]:::llm
-    end
-    
-    subgraph "Observability & LLMOps"
-        LANGSMITH[LangSmith / Tracing]:::ops
-        LOGGING[Winston / Datadog]:::ops
-    end
+    INGEST[Contract Ingestion]
+    PDF[PDF Extraction]
+    CHUNK[Document Chunking]
+    EMBED[Gemini Embeddings]
 
-    %% Client to API
-    FE <-->|JSON Payloads| API
+    DB[(PostgreSQL / Neon)]
+    VECTOR[(pgvector)]
+    BM25[BM25 Keyword Retrieval]
+
+    RETRIEVAL[Hybrid Retrieval]
+    CONTEXT[Contract-Grounded Context]
+
+    ORCH[LangChain + LangGraph]
+
+    SUMMARY[Summary Agent]
+    CLAUSE[Clause Agent]
+    RISK[Risk Agent]
+    COMPLIANCE[Compliance Agent]
+    NEGOTIATION[Negotiation Agent]
+    CHAT[Contract Chat Agent]
+    COMPARISON[Comparison Agent]
+    GRAPH[Knowledge Graph Agent]
+
+    LLM[NVIDIA NIM]
+    OPENROUTER[OpenRouter]
+    GEMINI[Google Gemini]
+
+    EVIDENCE[Evidence and Explainability]
+    KG[Knowledge Graph]
+    UI[Analysis Results and Visualization]
+
+    U --> FE
+    FE --> API
     API --> AUTH
-    API --> WORKER
 
-    %% Ingestion Flow
-    WORKER --> INGEST
-    INGEST --> EXTRACT
-    EXTRACT --> CHUNK
-    CHUNK --> EMBED_API
-    EMBED_API -->|Batch API Calls| EMBED_MODEL
-    EMBED_MODEL -->|Dense Vectors| VECTOR
-    CHUNK -->|Tokenization| BM25
+    API --> INGEST
+    INGEST --> PDF
+    PDF --> CHUNK
+    CHUNK --> EMBED
 
-    %% RAG Retrieval Flow
-    ORCH -->|Query Expansion| ROUTER
-    ROUTER -->|Alpha=0.7| VECTOR
-    ROUTER -->|Alpha=0.3| BM25
-    VECTOR -->|Top-K Dense| RRF[Reciprocal Rank Fusion]
-    BM25 -->|Top-K Sparse| RRF
-    RRF -->|Ranked Context| ORCH
-    
-    %% Multi-Agent Routing
-    ORCH --> SUMMARY & CLAUSE & RISK & COMPLIANCE & NEGOTIATION & CHAT & COMPARISON & GRAPH
-    
-    %% LLM Execution with Fallback
-    SUMMARY & CLAUSE & RISK & COMPLIANCE & NEGOTIATION & CHAT & COMPARISON & GRAPH -->|Prompt + Context| LLM_NIM
-    LLM_NIM -.->|Timeout / 503| LLM_OPENROUTER
-    LLM_OPENROUTER -.->|Rate Limit| LLM_GEMINI
-    
-    %% Persistence
+    EMBED --> VECTOR
+    CHUNK --> BM25
+
+    VECTOR --> RETRIEVAL
+    BM25 --> RETRIEVAL
+    RETRIEVAL --> CONTEXT
+
+    API --> ORCH
+    CONTEXT --> ORCH
+
+    ORCH --> SUMMARY
+    ORCH --> CLAUSE
+    ORCH --> RISK
+    ORCH --> COMPLIANCE
+    ORCH --> NEGOTIATION
+    ORCH --> CHAT
+    ORCH --> COMPARISON
+    ORCH --> GRAPH
+
+    SUMMARY --> LLM
+    CLAUSE --> LLM
+    RISK --> LLM
+    COMPLIANCE --> LLM
+    NEGOTIATION --> LLM
+    CHAT --> LLM
+    COMPARISON --> LLM
+    GRAPH --> LLM
+
+    LLM --> OPENROUTER
+    OPENROUTER --> GEMINI
+
     API --> DB
-    VECTOR --- DB
-    
-    %% Tracing
-    ORCH -.->|Telemetery, Tokens, Latency| LANGSMITH
-    LLM_NIM -.-> LANGSMITH
-    API -.-> LOGGING
+    DB --> EVIDENCE
+    GRAPH --> KG
+    EVIDENCE --> UI
+    KG --> UI
 ```
 
 ## RAG Pipeline
