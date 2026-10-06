@@ -242,16 +242,18 @@ def run_clause_agent(
                 continue
 
             # ----------------------------------------------------------
-            # Hallucination guard: verify clause content exists in source text.
+            # Hallucination guard: verify clause content exists in source text
             # ----------------------------------------------------------
             if not _title_present_in_text(title, contract_text):
+                # Check token overlap instead of strict substring match
                 content_snippet = content[:80].lower().strip()
                 if content_snippet not in contract_text.lower():
-                    continue
-            elif len(content.strip()) > 20 and content.strip() not in contract_text:
-                if not any(segment.strip() in contract_text for segment in [content.strip()[:200], content.strip()[-200:]]):
-                    continue
-
+                    content_tokens = set(re.split(r'\W+', content.lower()))
+                    text_tokens = set(re.split(r'\W+', contract_text.lower()))
+                    overlap = len(content_tokens.intersection(text_tokens))
+                    if overlap < max(3, len(content_tokens) * 0.4): # Require 40% word overlap
+                        continue
+            
             # ----------------------------------------------------------
             # Category mapping (deterministic keyword-based)
             # ----------------------------------------------------------

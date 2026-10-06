@@ -176,6 +176,13 @@ function AgentWorkspaceContent() {
     }
   }, [urlId]);
 
+  const { data: statusData } = useQuery({
+    queryKey: ["contract_status", effectiveContractId],
+    queryFn: () => contractsApi.getStatus(effectiveContractId),
+    enabled: Boolean(effectiveContractId),
+    refetchInterval: (query) => (query?.state?.data?.processing ? 3000 : false),
+  });
+
   const { data: contracts, isLoading: loadingContracts } = useQuery({
     queryKey: ["contracts"],
     queryFn: contractsApi.getAll,
@@ -193,12 +200,40 @@ function AgentWorkspaceContent() {
 
   // STORED agent results — served by GET /analysis/stored/{id} (no LLM calls).
   // This is what makes "run once, view forever" work across page reloads.
-  const { data: stored } = useQuery<StoredResultsResponse>({
+  const { data: stored, refetch: refetchStored } = useQuery<StoredResultsResponse>({
     queryKey: ["stored_results", effectiveContractId],
     queryFn: () => analysisApi.getStored(effectiveContractId),
     enabled: Boolean(effectiveContractId),
     staleTime: Infinity,
   });
+
+  useEffect(() => {
+    if (statusData && !statusData.processing) {
+       refetchStored();
+    }
+    
+    if (statusData && statusData.agents) {
+        setStates(prev => {
+            const next = { ...prev };
+            let changed = false;
+            for (const [key, status] of Object.entries(statusData.agents)) {
+                if (status === "processing" && next[key]?.status !== "running") {
+                    next[key] = { status: "running" };
+                    changed = true;
+                } else if (status === "completed" && next[key]?.status === "running") {
+                    // It finished!
+                    refetchStored(); // refresh to get the result
+                    next[key] = { status: "idle" }; // stateFor will handle 'done' if stored result exists
+                    changed = true;
+                } else if (status === "error" && next[key]?.status === "running") {
+                    next[key] = { status: "error", preview: "Agent failed." };
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }
+  }, [statusData, refetchStored]);
 
   const setStatus = (id: string, s: { status: "idle" | "running" | "done" | "error"; preview?: string }) => {
     setStates((prev) => {

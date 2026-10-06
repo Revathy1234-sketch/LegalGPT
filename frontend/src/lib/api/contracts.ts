@@ -15,6 +15,20 @@ export interface ContractResponse {
   };
 }
 
+export interface ContractStatusResponse {
+  contract_id: string;
+  processing: boolean;
+  agents: {
+    summary: string;
+    clause: string;
+    risk: string;
+    compliance: string;
+    negotiation: string;
+    knowledge_graph: string;
+    [key: string]: string;
+  };
+}
+
 export const contractsApi = {
   getAll: async (): Promise<ContractResponse[]> => {
     const response = await apiClient.get<ContractResponse[]>('/api/v1/contracts/');
@@ -23,6 +37,11 @@ export const contractsApi = {
 
   getById: async (id: string): Promise<ContractResponse> => {
     const response = await apiClient.get<ContractResponse>(`/api/v1/contracts/${id}`);
+    return response.data;
+  },
+
+  getStatus: async (id: string): Promise<ContractStatusResponse> => {
+    const response = await apiClient.get<ContractStatusResponse>(`/api/v1/contracts/${id}/status`);
     return response.data;
   },
 

@@ -282,6 +282,57 @@ def get_contract(
     return contract
 
 
+@router.get("/{contract_id}/status")
+def get_contract_status(
+    contract_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    contract = get_authorized_contract(contract_id, current_user, db)
+    
+    from app.models.models import AgentExecutionLog
+    logs = db.query(AgentExecutionLog.task_type, AgentExecutionLog.output_payload).filter(
+        AgentExecutionLog.contract_id == contract_id
+    ).all()
+    
+    completed_tasks = {log.task_type: log for log in logs}
+    
+    agent_map = {
+        "summarize": "summary",
+        "clause_extraction": "clause",
+        "risk_analysis": "risk",
+        "compliance_check": "compliance",
+        "negotiation_analysis": "negotiation",
+        "knowledge_graph": "knowledge_graph"
+    }
+    
+    agents_status = {}
+    is_processing = contract.status.lower() in ["processing", "pending"]
+    import datetime, timezone
+    now = datetime.datetime.now(timezone.utc)
+    contract_time = contract.created_at.replace(tzinfo=timezone.utc) if contract.created_at.tzinfo is None else contract.created_at
+    is_recent = (now - contract_time).total_seconds() < 300
+    
+    for task_type, agent_name in agent_map.items():
+        if task_type in completed_tasks:
+            log = completed_tasks[task_type]
+            if isinstance(log.output_payload, dict) and log.output_payload.get("success") is False:
+                agents_status[agent_name] = "error"
+            else:
+                agents_status[agent_name] = "completed"
+        else:
+            agents_status[agent_name] = "processing" if is_recent else "pending"
+            
+    if all(s in ["completed", "error"] for s in agents_status.values()):
+        is_processing = False
+        
+    return {
+        "contract_id": str(contract_id),
+        "processing": is_processing,
+        "agents": agents_status
+    }
+
+
 def load_contract_text_from_storage(contract: Contract) -> str:
     if contract.summary:
         return contract.summary

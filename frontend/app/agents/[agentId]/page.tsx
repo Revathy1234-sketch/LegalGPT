@@ -369,6 +369,13 @@ function AgentDetailContent({ agentId }: { agentId: string }) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const evidencedFor = useRef<string | null>(null);
 
+  const urlId = searchParams.get("contractId");
+  useEffect(() => {
+    if (urlId) {
+      setContractId(urlId);
+    }
+  }, [urlId]);
+
   const { data: contracts } = useQuery({ queryKey: ["contracts"], queryFn: contractsApi.getAll });
 
   // Derived selections (no setState-in-effect): first contract until user picks.

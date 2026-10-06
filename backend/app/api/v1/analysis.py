@@ -3,7 +3,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.agents.chat_agent import run_chat_agent
@@ -15,7 +15,7 @@ from app.agents.negotiation_agent import run_negotiation_agent
 from app.agents.risk_agent import run_risk_analysis as run_risk_agent
 from app.agents.summary_agent import run_summary_agent
 from app.api.v1.auth import get_current_user
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.models.models import (
     Clause,
     Contract,
@@ -372,6 +372,7 @@ def run_risk_analysis(
 @router.post('/clauses/{contract_id}', response_model=ClauseExtractionResponse)
 def extract_clauses(
     contract_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -387,80 +388,43 @@ def extract_clauses(
         cached = _get_cached_result(db, contract_id, 'clause_extraction')
         if cached:
             return {'clauses': cached.get('clauses', [])}
+
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            response = run_clause_agent(str(contract_id))
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            result = _agent_payload(response)
+            _log_execution(db_bg, 'ClauseAgent', str(contract_id), 'clause_extraction', response, start_time, end_time)
             
-        import datetime
-        from datetime import timezone
-        
-        now = datetime.datetime.now(timezone.utc)
-        if contract.created_at.tzinfo is None:
-            contract_time = contract.created_at.replace(tzinfo=timezone.utc)
-        else:
-            contract_time = contract.created_at
-            
-        if (now - contract_time).total_seconds() < 300:
-            raise HTTPException(
-                status_code=409, 
-                detail="Clause extraction is still processing in the background. Please wait a moment for it to complete."
-            )
+            extracted = result.get('clauses', [])
+            if not isinstance(extracted, list):
+                extracted = []
 
-    start_time = time.perf_counter()
-    response = run_clause_agent(str(contract_id))
-    end_time = time.perf_counter()
-    _reset_session(db)
-    result = _agent_payload(response)
+            db_bg.query(Clause).filter(Clause.contract_id == contract_id).delete()
+            db_bg.query(ContractClauseExtraction).filter(ContractClauseExtraction.contract_id == contract_id).delete()
 
-    _log_execution(
-        db, 'ClauseAgent', str(contract_id), 'clause_extraction',
-        response, start_time, end_time,
-    )
+            for clause in extracted:
+                if not isinstance(clause, dict): continue
+                clause_type = clause.get('clause_type') or clause.get('category') or clause.get('title') or 'Unknown'
+                original_text = clause.get('original_text') or clause.get('content') or ''
+                confidence = float(clause.get('confidence_score', 1.0))
 
-    extracted = result.get('clauses', [])
-    if not isinstance(extracted, list):
-        extracted = []
+                db_bg.add(Clause(contract_id=contract_id, clause_type=clause_type, original_text=original_text, confidence_score=confidence))
+                db_bg.add(ContractClauseExtraction(
+                    contract_id=contract_id, clause_type=clause_type, original_text=original_text,
+                    confidence_score=confidence, source_parent_id=clause.get('source_parent_id'), source_chunk_id=clause.get('source_chunk_id')
+                ))
+            db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background clause agent failed: {e}")
+        finally:
+            db_bg.close()
 
-    db.query(Clause).filter(Clause.contract_id == contract_id).delete()
-    db.query(ContractClauseExtraction).filter(
-        ContractClauseExtraction.contract_id == contract_id
-    ).delete()
-
-    clauses_out = []
-    for clause in extracted:
-        if not isinstance(clause, dict):
-            continue
-        clause_type = (
-            clause.get('clause_type') or clause.get('category') or
-            clause.get('title') or 'Unknown'
-        )
-        original_text = clause.get('original_text') or clause.get('content') or ''
-        confidence = float(clause.get('confidence_score', 1.0))
-
-        db.add(Clause(
-            contract_id=contract_id,
-            clause_type=clause_type,
-            original_text=original_text,
-            confidence_score=confidence,
-        ))
-        db.add(ContractClauseExtraction(
-            contract_id=contract_id,
-            clause_type=clause_type,
-            original_text=original_text,
-            confidence_score=confidence,
-            source_parent_id=clause.get('source_parent_id'),
-            source_chunk_id=clause.get('source_chunk_id'),
-        ))
-        clauses_out.append({
-            'title': clause.get('title') or clause_type,
-            'category': clause.get('category') or clause_type,
-            'content': original_text,
-            'confidence_score': confidence,
-        })
-
-    db.commit()
-    logger.info(
-        'Clause extraction completed: %s clauses saved for contract %s',
-        len(clauses_out), contract_id,
-    )
-    return {'clauses': clauses_out}
+    background_tasks.add_task(bg_task)
+    return {'clauses': []}
 
 
 @router.post('/compliance/{contract_id}', response_model=ComplianceResponse)
@@ -712,6 +676,7 @@ def get_chat_history(
 @router.post('/knowledge-graph/{contract_id}', response_model=KnowledgeGraphResponse)
 def knowledge_graph(
     contract_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -732,41 +697,29 @@ def knowledge_graph(
                     "relationships": cached.get("relationships", [])
                 }
             }
-            
-        import datetime
-        from datetime import timezone
-        
-        now = datetime.datetime.now(timezone.utc)
-        if contract.created_at.tzinfo is None:
-            contract_time = contract.created_at.replace(tzinfo=timezone.utc)
-        else:
-            contract_time = contract.created_at
-            
-        if (now - contract_time).total_seconds() < 300:
-            raise HTTPException(
-                status_code=409, 
-                detail="Knowledge Graph is still processing in the background. Please wait a moment for it to complete."
-            )
 
-    start_time = time.perf_counter()
-    agent_response = run_knowledge_graph_agent(str(contract_id))
-    end_time = time.perf_counter()
-    _reset_session(db)
-    result_dict = _agent_payload(agent_response)
+    # Start task in background
+    def bg_task():
+        db_bg = SessionLocal()
+        try:
+            start_time = time.perf_counter()
+            agent_response = run_knowledge_graph_agent(str(contract_id))
+            end_time = time.perf_counter()
+            _reset_session(db_bg)
+            _log_execution(db_bg, 'KnowledgeGraphAgent', str(contract_id), 'knowledge_graph', agent_response, start_time, end_time)
+            db_bg.commit()
+        except Exception as e:
+            logger.error(f"Background KG failed: {e}")
+        finally:
+            db_bg.close()
 
-    _log_execution(
-        db, 'KnowledgeGraphAgent', str(contract_id), 'knowledge_graph',
-        agent_response, start_time, end_time,
-    )
-    # Persist the execution log so the result is cached for every future view.
-    # (Without this commit the session rolled back on close and the Knowledge
-    #  Graph agent re-ran from scratch on every page load.)
-    db.commit()
+    background_tasks.add_task(bg_task)
 
+    # Return empty success immediately so frontend polling takes over
     return {
         "success": True,
         "result": {
-            "entities": result_dict.get("entities", []),
-            "relationships": result_dict.get("relationships", [])
+            "entities": [],
+            "relationships": []
         }
     }
